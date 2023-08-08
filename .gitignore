@@ -1,0 +1,14 @@
+/*.json
+/*.pkl
+/*.pkl.gz
+/*.sh
+/logs
+/models
+/best_model
+/dev
+/test
+/configs
+/results
+/prediction
+/__pycache__
+/.vscode
