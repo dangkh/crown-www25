@@ -8,6 +8,7 @@ from layers import MultiHeadAttention, Attention, ScaledDotProduct_CandidateAtte
 from newsEncoders import NewsEncoder, HDC
 from torch_scatter import scatter_sum, scatter_softmax # need to be installed by following `https://pytorch-scatter.readthedocs.io/en/latest`
 
+# test
 
 class UserEncoder(nn.Module):
     def __init__(self, news_encoder: NewsEncoder, config: Config):
