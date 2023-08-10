@@ -8,8 +8,6 @@ from layers import MultiHeadAttention, Attention, ScaledDotProduct_CandidateAtte
 from newsEncoders import NewsEncoder, HDC
 from torch_scatter import scatter_sum, scatter_softmax # need to be installed by following `https://pytorch-scatter.readthedocs.io/en/latest`
 
-# test
-
 class UserEncoder(nn.Module):
     def __init__(self, news_encoder: NewsEncoder, config: Config):
         super(UserEncoder, self).__init__()
@@ -57,7 +55,7 @@ class CIDER(UserEncoder):
         user_representation = self.attention(history_embedding).unsqueeze(dim=1).expand(-1, news_num, -1) # [batch_size, news_embedding_dim]
         return user_representation
 
-
+# Structural User Encoding(SUE)
 class SUE(UserEncoder):
     def __init__(self, news_encoder: NewsEncoder, config: Config):
         super(SUE, self).__init__(news_encoder, config)
