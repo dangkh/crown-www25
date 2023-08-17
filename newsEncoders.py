@@ -57,31 +57,37 @@ class NewsEncoder(nn.Module):
 class CIDER(NewsEncoder):
     def __init__(self, config: Config):
         super(CIDER, self).__init__(config)
-        # self.max_title_length = config.max_title_length
-        # self.max_content_length = config.max_abstract_length
-        # self.cnn_kernel_num = config.cnn_kernel_num
-        # self.conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)
-        # self.attention = Attention(config.cnn_kernel_num, config.attention_dim)
-        # self.news_embedding_dim = config.cnn_kernel_num + config.category_embedding_dim + config.subCategory_embedding_dim
 
         self.max_title_length = config.max_title_length
-        self.max_content_length = config.max_abstract_length
-        self.cnn_kernel_num = config.cnn_kernel_num
-        self.news_embedding_dim = config.cnn_kernel_num
-        self.title_conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)
-        self.content_conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)
-        self.title_attention = Attention(config.cnn_kernel_num, config.attention_dim)
-        self.content_attention = Attention(config.cnn_kernel_num, config.attention_dim)
-        self.category_affine = nn.Linear(config.category_embedding_dim, config.cnn_kernel_num, bias=True)
-        self.subCategory_affine = nn.Linear(config.subCategory_embedding_dim, config.cnn_kernel_num, bias=True)
-        self.affine1 = nn.Linear(config.cnn_kernel_num, config.attention_dim, bias=True)
+        self.max_body_length = config.max_abstract_length
+        # self.cnn_kernel_num = config.cnn_kernel_num             # for CNN encoding
+        # self.news_embedding_dim = config.cnn_kernel_num         # for CNN encoding
+        # self.title_conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)           # for CNN encoding
+        # self.body_conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)            # for CNN encoding
+        
+        self.feature_dim = config.head_num * config.head_dim                # for MH-Attention
+        self.news_embedding_dim = config.head_num * config.head_dim         # for MH-Attention
+        self.title_multiheadAttention = MultiHeadAttention(config.head_num, config.word_embedding_dim, config.max_title_length, config.max_title_length, config.head_dim, config.head_dim)          # for MH-Attention
+        self.body_multiheadAttention = MultiHeadAttention(config.head_num, config.word_embedding_dim, config.max_abstract_length, config.max_abstract_length, config.head_dim, config.head_dim)     # for MH-Attention
+        
+        # self.title_attention = Attention(config.cnn_kernel_num, config.attention_dim)               # for CNN encoding
+        # self.body_attention = Attention(config.cnn_kernel_num, config.attention_dim)                # for CNN encoding
+        self.title_attention = Attention(config.head_num*config.head_dim, config.attention_dim)     # for MH-Attention
+        self.body_attention = Attention(config.head_num*config.head_dim, config.attention_dim)      # for MH-Attention
+        
+        # self.category_affine = nn.Linear(config.category_embedding_dim, config.cnn_kernel_num, bias=True)                     # for CNN encoding
+        # self.subCategory_affine = nn.Linear(config.subCategory_embedding_dim, config.cnn_kernel_num, bias=True)               # for CNN encoding
+        self.category_affine = nn.Linear(config.category_embedding_dim, config.head_num * config.head_dim, bias=True)           # for MH-Attention
+        self.subCategory_affine = nn.Linear(config.subCategory_embedding_dim, config.head_num * config.head_dim, bias=True)     # for MH-Attention
+        # self.affine1 = nn.Linear(config.cnn_kernel_num, config.attention_dim, bias=True)                  # for CNN encoding
+        self.affine1 = nn.Linear(config.head_num * config.head_dim, config.attention_dim, bias=True)        # for MH-Attention
         self.affine2 = nn.Linear(config.attention_dim, 1, bias=False) 
 
     def initialize(self):
         super().initialize()
         # self.attention.initialize()
         self.title_attention.initialize()
-        self.content_attention.initialize()
+        self.body_attention.initialize()
         nn.init.xavier_uniform_(self.category_affine.weight)
         nn.init.zeros_(self.category_affine.bias)
         nn.init.xavier_uniform_(self.subCategory_affine.weight)
@@ -95,17 +101,23 @@ class CIDER(NewsEncoder):
         news_num = title_text.size(1)
         batch_news_num = batch_size * news_num
         t_mask = title_mask.view([batch_news_num, self.max_title_length])                                                       # [batch_size * news_num, max_sentence_length]
-        c_mask = content_mask.view([batch_news_num, self.max_content_length]) 
+        b_mask = content_mask.view([batch_news_num, self.max_body_length]) 
         
         # (1) Word embedding
         # to convert a news title from a word sequence into a sequence of dense semantic vectors
         title_w = self.dropout(self.word_embedding(title_text)).view([batch_news_num, self.max_title_length, self.word_embedding_dim])                       # [batch_size * news_num, max_title_length, word_embedding_dim]
-        content_w = self.dropout(self.word_embedding(content_text)).view([batch_news_num, self.max_content_length, self.word_embedding_dim])                 # [batch_size * news_num, max_content_length, word_embedding_dim]
+        body_w = self.dropout(self.word_embedding(content_text)).view([batch_news_num, self.max_body_length, self.word_embedding_dim])                       # [batch_size * news_num, max_content_length, word_embedding_dim]
         
         # (2) CNN encoding
         # to learn contextual word representations by capturing the local context information
-        title_c = self.dropout_(self.title_conv(title_w.permute(0, 2, 1)).permute(0, 2, 1))                                                           # [batch_size * news_num, max_sentence_length, cnn_kernel_num]
-        content_c = self.dropout_(self.content_conv(content_w.permute(0, 2, 1)).permute(0, 2, 1))                                                         # [batch_size * news_num, max_sentence_length, cnn_kernel_num]
+        # title_c = self.dropout_(self.title_conv(title_w.permute(0, 2, 1)).permute(0, 2, 1))                                                               # [batch_size * news_num, max_title_length, cnn_kernel_num]
+        # body_c = self.dropout_(self.body_conv(body_w.permute(0, 2, 1)).permute(0, 2, 1))                                                                  # [batch_size * news_num, max_content_length, cnn_kernel_num]
+
+        # (2) Multi-Head Self Attention encoding (adopt)
+        # to learn contextual representations of words by capturing their interactions
+        # (such long-distance interactions usually can not be captured by CNN)
+        title_c = self.dropout(self.title_multiheadAttention(title_w, title_w, title_w, t_mask))                                                               # [batch_size * news_num, max_title_length, news_embedding_dim]
+        body_c = self.dropout(self.body_multiheadAttention(body_w, body_w, body_w, b_mask))                                                                    # [batch_size * news_num, max_content_length, news_embedding_dim]
 
         # (3) Category-aware intent disentanglement
         # Intra(inter)-category intent distribution / *** LDA 조사해서 intent distribution를 LDA로 가능한 지 확인 ***
@@ -122,19 +134,23 @@ class CIDER(NewsEncoder):
         
         # (5) Attention layer
         # word-level attention network to select important words in news titles to learn more informative news representations
-        title_representation = self.title_attention(title_c).view([batch_size, news_num, self.cnn_kernel_num])                        # [batch_size, news_num, cnn_kernel_num]
-        content_representation = self.content_attention(content_c).view([batch_size, news_num, self.cnn_kernel_num])                        # [batch_size, news_num, cnn_kernel_num]
         
-        category_representation = F.relu(self.category_affine(self.category_embedding(category)), inplace=True)                              # [batch_size, news_num, cnn_kernel_num]
-        subCategory_representation = F.relu(self.subCategory_affine(self.subCategory_embedding(subCategory)), inplace=True)                  # [batch_size, news_num, cnn_kernel_num]
+        # title_representation = self.title_attention(title_c).view([batch_size, news_num, self.cnn_kernel_num])                              # [batch_size, news_num, cnn_kernel_num]          for CNN encoding
+        # body_representation = self.body_attention(body_c).view([batch_size, news_num, self.cnn_kernel_num])                                 # [batch_size, news_num, cnn_kernel_num]          for CNN encoding
+        title_representation = self.title_attention(title_c, mask=t_mask).view([batch_size, news_num, self.feature_dim])                      # [batch_size, news_num, news_embedding_dim]      for MH-Attention
+        body_representation = self.body_attention(body_c, mask=b_mask).view([batch_size, news_num, self.feature_dim])                         # [batch_size, news_num, news_embedding_dim]      for MH-Attention
+
+        category_representation = F.relu(self.category_affine(self.category_embedding(category)), inplace=True)                              # [batch_size, news_num, cnn_kernel_num(news_embedding_dim)]
+        subCategory_representation = F.relu(self.subCategory_affine(self.subCategory_embedding(subCategory)), inplace=True)                  # [batch_size, news_num, cnn_kernel_num(news_embedding_dim)]
 
         # (6) Feature fusion
-        # news_representation = self.feature_fusion(news_representation, category, subCategory)                                       # [batch_size, news_num, news_embedding_dim]
-        feature = torch.stack([title_representation, content_representation, category_representation, subCategory_representation], dim=2)
+        # news_representation = self.feature_fusion(news_representation, category, subCategory)                                              # [batch_size, news_num, news_embedding_dim]
+        feature = torch.stack([title_representation, body_representation, category_representation, subCategory_representation], dim=2)
         alpha = F.softmax(self.affine2(torch.tanh(self.affine1(feature))), dim=2)
         news_representation = (feature * alpha).sum(dim=2, keepdim=False)
         
         return news_representation
+
 
 # Collaborative News Encoding(CNE)
     # cross-selective encoding + cross-attentive encoding
