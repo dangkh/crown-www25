@@ -42,18 +42,27 @@ class CIDER(UserEncoder):
     def __init__(self, news_encoder: NewsEncoder, config: Config):
         super(CIDER, self).__init__(news_encoder, config)
         self.attention = Attention(self.news_embedding_dim, config.attention_dim)
+        self.multiheadAttention = MultiHeadAttention(config.head_num, self.news_embedding_dim, config.max_history_num, config.max_history_num, config.head_dim, config.head_dim)
+        self.affine = nn.Linear(config.head_num*config.head_dim, self.news_embedding_dim, bias=True)
 
     def initialize(self):
         self.attention.initialize()
+        self.multiheadAttention.initialize()
+        nn.init.xavier_uniform_(self.affine.weight, gain=nn.init.calculate_gain('relu'))
+        nn.init.zeros_(self.affine.bias)
 
     def forward(self, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_category, user_subCategory, \
                 user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, user_embedding, candidate_news_representation):
         news_num = candidate_news_representation.size(1)
         history_embedding = self.news_encoder(user_title_text, user_title_mask, user_title_entity, \
                                               user_content_text, user_content_mask, user_content_entity, \
-                                              user_category, user_subCategory, user_embedding)            # [batch_size, max_history_num, news_embedding_dim]
-        user_representation = self.attention(history_embedding).unsqueeze(dim=1).expand(-1, news_num, -1) # [batch_size, news_embedding_dim]
+                                              user_category, user_subCategory, user_embedding)                       # [batch_size, max_history_num, news_embedding_dim]
+        h = self.multiheadAttention(history_embedding, history_embedding, history_embedding, user_history_mask)      # [batch_size, max_history_num, head_num * head_dim]
+        h = F.relu(F.dropout(self.affine(h), training=self.training, inplace=True), inplace=True)                    # [batch_size, max_history_num, news_embedding_dim]
+        
+        user_representation = self.attention(h).unsqueeze(dim=1).repeat(1, news_num, 1)                              # [batch_size, news_num, news_embedding_dim]
         return user_representation
+
 
 # Structural User Encoding(SUE)
 class SUE(UserEncoder):

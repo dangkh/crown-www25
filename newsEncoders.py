@@ -57,29 +57,83 @@ class NewsEncoder(nn.Module):
 class CIDER(NewsEncoder):
     def __init__(self, config: Config):
         super(CIDER, self).__init__(config)
-        self.max_sentence_length = config.max_title_length
+        # self.max_title_length = config.max_title_length
+        # self.max_content_length = config.max_abstract_length
+        # self.cnn_kernel_num = config.cnn_kernel_num
+        # self.conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)
+        # self.attention = Attention(config.cnn_kernel_num, config.attention_dim)
+        # self.news_embedding_dim = config.cnn_kernel_num + config.category_embedding_dim + config.subCategory_embedding_dim
+
+        self.max_title_length = config.max_title_length
+        self.max_content_length = config.max_abstract_length
         self.cnn_kernel_num = config.cnn_kernel_num
-        self.conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)
-        self.attention = Attention(config.cnn_kernel_num, config.attention_dim)
-        self.news_embedding_dim = config.cnn_kernel_num + config.category_embedding_dim + config.subCategory_embedding_dim
+        self.news_embedding_dim = config.cnn_kernel_num
+        self.title_conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)
+        self.content_conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)
+        self.title_attention = Attention(config.cnn_kernel_num, config.attention_dim)
+        self.content_attention = Attention(config.cnn_kernel_num, config.attention_dim)
+        self.category_affine = nn.Linear(config.category_embedding_dim, config.cnn_kernel_num, bias=True)
+        self.subCategory_affine = nn.Linear(config.subCategory_embedding_dim, config.cnn_kernel_num, bias=True)
+        self.affine1 = nn.Linear(config.cnn_kernel_num, config.attention_dim, bias=True)
+        self.affine2 = nn.Linear(config.attention_dim, 1, bias=False) 
 
     def initialize(self):
         super().initialize()
-        self.attention.initialize()
+        # self.attention.initialize()
+        self.title_attention.initialize()
+        self.content_attention.initialize()
+        nn.init.xavier_uniform_(self.category_affine.weight)
+        nn.init.zeros_(self.category_affine.bias)
+        nn.init.xavier_uniform_(self.subCategory_affine.weight)
+        nn.init.zeros_(self.subCategory_affine.bias)
+        nn.init.xavier_uniform_(self.affine1.weight)
+        nn.init.zeros_(self.affine1.bias)
+        nn.init.xavier_uniform_(self.affine2.weight)
 
     def forward(self, title_text, title_mask, title_entity, content_text, content_mask, content_entity, category, subCategory, user_embedding):
         batch_size = title_text.size(0)
         news_num = title_text.size(1)
         batch_news_num = batch_size * news_num
-        mask = title_mask.view([batch_news_num, self.max_sentence_length])                                                          # [batch_size * news_num, max_sentence_length]
-        # 1. word embedding
-        w = self.dropout(self.word_embedding(title_text)).view([batch_news_num, self.max_sentence_length, self.word_embedding_dim]) # [batch_size * news_num, max_sentence_length, word_embedding_dim]
-        # 2. CNN encoding
-        c = self.dropout_(self.conv(w.permute(0, 2, 1)).permute(0, 2, 1))                                                           # [batch_size * news_num, max_sentence_length, cnn_kernel_num]
-        # 3. attention layer
-        news_representation = self.attention(c, mask=mask).view([batch_size, news_num, self.cnn_kernel_num])                        # [batch_size, news_num, cnn_kernel_num]
-        # 4. feature fusion
-        news_representation = self.feature_fusion(news_representation, category, subCategory)                                       # [batch_size, news_num, news_embedding_dim]
+        t_mask = title_mask.view([batch_news_num, self.max_title_length])                                                       # [batch_size * news_num, max_sentence_length]
+        c_mask = content_mask.view([batch_news_num, self.max_content_length]) 
+        
+        # (1) Word embedding
+        # to convert a news title from a word sequence into a sequence of dense semantic vectors
+        title_w = self.dropout(self.word_embedding(title_text)).view([batch_news_num, self.max_title_length, self.word_embedding_dim])                       # [batch_size * news_num, max_title_length, word_embedding_dim]
+        content_w = self.dropout(self.word_embedding(content_text)).view([batch_news_num, self.max_content_length, self.word_embedding_dim])                 # [batch_size * news_num, max_content_length, word_embedding_dim]
+        
+        # (2) CNN encoding
+        # to learn contextual word representations by capturing the local context information
+        title_c = self.dropout_(self.title_conv(title_w.permute(0, 2, 1)).permute(0, 2, 1))                                                           # [batch_size * news_num, max_sentence_length, cnn_kernel_num]
+        content_c = self.dropout_(self.content_conv(content_w.permute(0, 2, 1)).permute(0, 2, 1))                                                         # [batch_size * news_num, max_sentence_length, cnn_kernel_num]
+
+        # (3) Category-aware intent disentanglement
+        # Intra(inter)-category intent distribution / *** LDA 조사해서 intent distribution를 LDA로 가능한 지 확인 ***
+        # (: 카테고리에 따라 intent의 분포가 다름, 뉴스 기사마다 다양한 intent(k개)가 공존하고 이걸 잘 분리해보겠다는 것)
+        # (예를 들어 날씨/교통/스포츠와 같은 뉴스는 정보전달을 주로하고, 정치/사회 뉴스는 관심을 유도하기 위해 다소 자극적으로 작성됨)
+        # (즉, category에 따라서 기사들의 intent 가 달라질 수 있고, 이를 반영할 수 있어야함.)
+        # News articles with the same (different) category have (dis)similar intent distribution
+        
+        
+        # (4) Intent-distribution based title-body similarity
+        # How similar/different are the intent distributions of the title and body?
+        # title이 body와 유사하면 body를 더 반영, body와 유사하지 않으면 title을 더 반영하도록?
+        
+        
+        # (5) Attention layer
+        # word-level attention network to select important words in news titles to learn more informative news representations
+        title_representation = self.title_attention(title_c).view([batch_size, news_num, self.cnn_kernel_num])                        # [batch_size, news_num, cnn_kernel_num]
+        content_representation = self.content_attention(content_c).view([batch_size, news_num, self.cnn_kernel_num])                        # [batch_size, news_num, cnn_kernel_num]
+        
+        category_representation = F.relu(self.category_affine(self.category_embedding(category)), inplace=True)                              # [batch_size, news_num, cnn_kernel_num]
+        subCategory_representation = F.relu(self.subCategory_affine(self.subCategory_embedding(subCategory)), inplace=True)                  # [batch_size, news_num, cnn_kernel_num]
+
+        # (6) Feature fusion
+        # news_representation = self.feature_fusion(news_representation, category, subCategory)                                       # [batch_size, news_num, news_embedding_dim]
+        feature = torch.stack([title_representation, content_representation, category_representation, subCategory_representation], dim=2)
+        alpha = F.softmax(self.affine2(torch.tanh(self.affine1(feature))), dim=2)
+        news_representation = (feature * alpha).sum(dim=2, keepdim=False)
+        
         return news_representation
 
 # Collaborative News Encoding(CNE)
