@@ -127,6 +127,20 @@ class CIDER(NewsEncoder):
         # News articles with the same (different) category have (dis)similar intent distribution
         
         
+        
+        # (before) 89,90라인 날리기, set transformer, Multi-head Attention Block(MAB)(self-attention 2번) 수식 고려해서 적용해보기 than naive MHSA
+        #                  + 
+        #    23.08.18 논의 내용 정리 (코드 구현 플로우)
+        # 0. 실험 결과 계속 test해보면서 긍정적인 상황인지 careful하게 접근하기 + MAB 적용해볼 수 있으면 해보기 + 왜 좋은건지 짧게 설명가능 하도록
+        # 1. Category-Title embedding concat , Category-Body embedding concat
+        # 2. input: each C-T/C-B embedding -> k-linear layers(= k-intent layers for disentanglement) -> output: k-category-aware C-T/C-B intent embeddings
+        # 3. input: k-category-aware C-T/C-B intent embeddings -> Attention layer(or MAB), att_score = intent distribution -> output: Title embedding, Body embedding
+        # 4. input: Title embedding, Body embedding -> concat -> output: news embedding 
+        #                  +
+        # (after) k-intents가 서로 멀어지도록 (학습)하는 방법 구상, Title-Body 유사할수록 Body를 더 많이 반영하도록 하는 방법 구상
+        
+        
+        
         # (4) Intent-distribution based title-body similarity
         # How similar/different are the intent distributions of the title and body?
         # title이 body와 유사하면 body를 더 반영, body와 유사하지 않으면 title을 더 반영하도록?
