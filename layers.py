@@ -208,7 +208,8 @@ class ScaledDotProduct_CandidateAttention(nn.Module):
         out = torch.bmm(alpha.unsqueeze(dim=1), feature).squeeze(dim=1)                                       # [batch_size, feature_dim]
         return out
 
-
+# 주어진 feature와 query 간의 어텐션(attention)을 계산하는 모듈을 정의
+# 특정 쿼리(query)에 대해 입력 피쳐(feature) 중에서 중요한 부분에 가중치를 부여 > 중요도에 따라 가중합을 계산
 class CandidateAttention(nn.Module):
     def __init__(self, feature_dim: int, query_dim: int, attention_dim: int):
         super(CandidateAttention, self).__init__()
@@ -231,9 +232,13 @@ class CandidateAttention(nn.Module):
     def forward(self, feature, query, mask=None):
         a = self.attention_affine(torch.tanh(self.feature_affine(feature) + self.query_affine(query).unsqueeze(dim=1))).squeeze(dim=2) # [batch_size, feature_num]
         if mask is not None:
+            # 어텐션 가중치 텐서
             alpha = F.softmax(a.masked_fill(mask == 0, -1e9), dim=1)                                                                   # [batch_size, feature_num]
         else:
             alpha = F.softmax(a, dim=1)                                                                                                # [batch_size, feature_num]
+        # alpha의 모든 배치([batch_size, 1, feature_num])에 대해 각각의 feature 벡터에 어텐션 가중치를 곱한 값을 계산
+        # squeeze(dim=1)로 차원 축소([batch_size, feature_dim])
+        # 어텐션 가중치를 기반으로 입력 feature와의 가중합을 계산하여 어텐션 결과를 반환
         out = torch.bmm(alpha.unsqueeze(dim=1), feature).squeeze(dim=1)                                                                # [batch_size, feature_dim]
         return out
 
