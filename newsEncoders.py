@@ -121,7 +121,7 @@ class CIDER(NewsEncoder):
 
         # (3) Category-aware intent disentanglement
         # Intra(inter)-category intent distribution / *** LDA 조사해서 intent distribution를 LDA로 가능한 지 확인 ***
-        # (: 카테고리에 따라 intent의 분포가 다름, 뉴스 기사마다 다양한 intent(k개)가 공존하고 이걸 잘 분리해보겠다는 것)
+        # (: 카테고리에 따라 intent의 분포가 다를 수 있음, 뉴스 기사마다 다양한 intent(k개)가 공존하고 이걸 잘 분리해보겠다는 것)
         # (예를 들어 날씨/교통/스포츠와 같은 뉴스는 정보전달을 주로하고, 정치/사회 뉴스는 관심을 유도하기 위해 다소 자극적으로 작성됨)
         # (즉, category에 따라서 기사들의 intent 가 달라질 수 있고, 이를 반영할 수 있어야함.)
         # News articles with the same (different) category have (dis)similar intent distribution
