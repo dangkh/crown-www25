@@ -86,7 +86,5 @@ if __name__ == '__main__':
         train(config, data_corpus)
         config.test_model_path = config.best_model_dir + '/#' + str(config.run_index) + '/' + config.news_encoder + '-' + config.user_encoder
         test(config, data_corpus)
-    elif config.mode == 'dev':
-        dev(config, data_corpus)
     elif config.mode == 'test':
         test(config, data_corpus)
