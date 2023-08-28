@@ -82,7 +82,7 @@ class CIDER(NewsEncoder):
         # self.affine1 = nn.Linear(config.cnn_kernel_num, config.attention_dim, bias=True)                  # for CNN encoding
         self.affine1 = nn.Linear(config.head_num * config.head_dim, config.attention_dim, bias=True)        # for MH-Attention
         self.affine2 = nn.Linear(config.attention_dim, 1, bias=False) 
-
+        
     def initialize(self):
         super().initialize()
         # self.attention.initialize()
@@ -116,8 +116,8 @@ class CIDER(NewsEncoder):
         # (2) Multi-Head Self Attention encoding (adopt)
         # to learn contextual representations of words by capturing their interactions
         # (such long-distance interactions usually can not be captured by CNN)
-        title_c = self.dropout(self.title_multiheadAttention(title_w, title_w, title_w, t_mask))                                                               # [batch_size * news_num, max_title_length, news_embedding_dim]
-        body_c = self.dropout(self.body_multiheadAttention(body_w, body_w, body_w, b_mask))                                                                    # [batch_size * news_num, max_content_length, news_embedding_dim]
+        title_m = self.dropout(self.title_multiheadAttention(title_w, title_w, title_w, t_mask))                                                               # [batch_size * news_num, max_title_length, news_embedding_dim]
+        body_m = self.dropout(self.body_multiheadAttention(body_w, body_w, body_w, b_mask))                                                                    # [batch_size * news_num, max_content_length, news_embedding_dim]
 
         # (3) Category-aware intent disentanglement
         # Intra(inter)-category intent distribution / *** LDA 조사해서 intent distribution를 LDA로 가능한 지 확인 ***
@@ -151,12 +151,12 @@ class CIDER(NewsEncoder):
         
         # title_representation = self.title_attention(title_c).view([batch_size, news_num, self.cnn_kernel_num])                              # [batch_size, news_num, cnn_kernel_num]          for CNN encoding
         # body_representation = self.body_attention(body_c).view([batch_size, news_num, self.cnn_kernel_num])                                 # [batch_size, news_num, cnn_kernel_num]          for CNN encoding
-        title_representation = self.title_attention(title_c, mask=t_mask).view([batch_size, news_num, self.feature_dim])                      # [batch_size, news_num, news_embedding_dim]      for MH-Attention
-        body_representation = self.body_attention(body_c, mask=b_mask).view([batch_size, news_num, self.feature_dim])                         # [batch_size, news_num, news_embedding_dim]      for MH-Attention
-
+        title_representation = self.title_attention(title_m, mask=t_mask).view([batch_size, news_num, self.feature_dim])                      # [batch_size, news_num, news_embedding_dim]      for MH-Attention
+        body_representation = self.body_attention(body_m, mask=b_mask).view([batch_size, news_num, self.feature_dim])                         # [batch_size, news_num, news_embedding_dim]      for MH-Attention
+        
         category_representation = F.relu(self.category_affine(self.category_embedding(category)), inplace=True)                              # [batch_size, news_num, cnn_kernel_num(news_embedding_dim)]
         subCategory_representation = F.relu(self.subCategory_affine(self.subCategory_embedding(subCategory)), inplace=True)                  # [batch_size, news_num, cnn_kernel_num(news_embedding_dim)]
-
+        
         # (6) Feature fusion
         # news_representation = self.feature_fusion(news_representation, category, subCategory)                                              # [batch_size, news_num, news_embedding_dim]
         feature = torch.stack([title_representation, body_representation, category_representation, subCategory_representation], dim=2)
