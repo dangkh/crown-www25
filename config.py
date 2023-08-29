@@ -49,6 +49,7 @@ class Config:
         parser.add_argument('--attention_dim', type=int, default=200, help="Attention dimension")
         parser.add_argument('--head_num', type=int, default=20, help='Head number of multi-head self-attention')
         parser.add_argument('--head_dim', type=int, default=20, help='Head dimension of multi-head self-attention')
+        parser.add_argument('--intent_embedding_dim', type=int, default=200, help='K-intent embedding dimension')
         parser.add_argument('--user_embedding_dim', type=int, default=50, help='User embedding dimension')
         parser.add_argument('--category_embedding_dim', type=int, default=50, help='Category embedding dimension')
         parser.add_argument('--subCategory_embedding_dim', type=int, default=50, help='SubCategory embedding dimension')
