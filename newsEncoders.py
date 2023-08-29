@@ -52,6 +52,7 @@ class NewsEncoder(nn.Module):
         subCategory_representation = self.subCategory_embedding(subCategory)                                                                           # [batch_size, news_num, subCategory_embedding_dim]
         news_representation = torch.cat([news_representation, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2) # [batch_size, news_num, news_embedding_dim]
         return news_representation
+    
 
 # Our proposed model: CIDER - news encoder
 class CIDER(NewsEncoder):
@@ -65,8 +66,8 @@ class CIDER(NewsEncoder):
         # self.title_conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)           # for CNN encoding
         # self.body_conv = Conv1D(config.cnn_method, config.word_embedding_dim, config.cnn_kernel_num, config.cnn_window_size)            # for CNN encoding
         
-        self.feature_dim = config.head_num * config.head_dim                # for MH-Attention
-        self.news_embedding_dim = config.head_num * config.head_dim         # for MH-Attention
+        self.feature_dim = config.head_num * config.head_dim                # for MH-Attention (20*20)
+        self.news_embedding_dim = config.head_num * config.head_dim         # for MH-Attention (400)
         self.title_multiheadAttention = MultiHeadAttention(config.head_num, config.word_embedding_dim, config.max_title_length, config.max_title_length, config.head_dim, config.head_dim)          # for MH-Attention
         self.body_multiheadAttention = MultiHeadAttention(config.head_num, config.word_embedding_dim, config.max_abstract_length, config.max_abstract_length, config.head_dim, config.head_dim)     # for MH-Attention
         
@@ -79,10 +80,17 @@ class CIDER(NewsEncoder):
         # self.subCategory_affine = nn.Linear(config.subCategory_embedding_dim, config.cnn_kernel_num, bias=True)               # for CNN encoding
         self.category_affine = nn.Linear(config.category_embedding_dim, config.head_num * config.head_dim, bias=True)           # for MH-Attention
         self.subCategory_affine = nn.Linear(config.subCategory_embedding_dim, config.head_num * config.head_dim, bias=True)     # for MH-Attention
-        # self.affine1 = nn.Linear(config.cnn_kernel_num, config.attention_dim, bias=True)                  # for CNN encoding
-        self.affine1 = nn.Linear(config.head_num * config.head_dim, config.attention_dim, bias=True)        # for MH-Attention
-        self.affine2 = nn.Linear(config.attention_dim, 1, bias=False) 
+        # self.affine1 = nn.Linear(config.cnn_kernel_num, config.attention_dim, bias=True)                                      # for CNN encoding
+        self.affine1 = nn.Linear(config.intent_embedding_dim, config.attention_dim, bias=True)               # for intent attention (linear transformation)
+        self.affine2 = nn.Linear(config.attention_dim, 1, bias=False)                                        # for intent attention (distribution score)
         
+        self.intent_num = 3     # hyper-parameter k
+        self.intent_layers = nn.ModuleList([nn.Linear(config.head_num * config.head_dim 
+                                                      + config.category_embedding_dim
+                                                      + config.subCategory_embedding_dim
+                                                      , config.intent_embedding_dim, bias=True) 
+                                            for _ in range(self.intent_num)])
+    
     def initialize(self):
         super().initialize()
         # self.attention.initialize()
@@ -95,75 +103,113 @@ class CIDER(NewsEncoder):
         nn.init.xavier_uniform_(self.affine1.weight)
         nn.init.zeros_(self.affine1.bias)
         nn.init.xavier_uniform_(self.affine2.weight)
+        # Initialize each intent layer with different weights to learn different embedding for each intent
+        for intent_layer in self.intent_layers:
+            nn.init.xavier_uniform_(intent_layer.weight)
+            nn.init.zeros_(intent_layer.bias)
+
+    # Input
+    # title/body_embedding : [batch_size, news_num, title/body_embedding_dim]
+    # category            : [batch_size, news_num]
+    # subCategory         : [batch_size, news_num]
+    # Output
+    # category-aware_title/body_embedding : [batch_size, news_num, title/body_embedding_dim + cat_dim + subcat_dim]
+    def category_title_concat(self, title_embedding, category, subCategory):
+        category_representation = self.category_embedding(category)                                                                                    # [batch_size, news_num, category_embedding_dim] 50
+        subCategory_representation = self.subCategory_embedding(subCategory)                                                                           # [batch_size, news_num, subCategory_embedding_dim] 50
+        title_embedding = torch.cat([title_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)         # [batch_size, news_num, title_embedding_dim = title+cat+subcat] 400+100=500
+        return title_embedding
+
+    def category_body_concat(self, body_embedding, category, subCategory):
+        category_representation = self.category_embedding(category)                                                                                    # [batch_size, news_num, category_embedding_dim]
+        subCategory_representation = self.subCategory_embedding(subCategory)                                                                           # [batch_size, news_num, subCategory_embedding_dim]
+        body_embedding = torch.cat([body_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)           # [batch_size, news_num, body_embedding_dim]
+        return body_embedding
+
+    
+    # Input: [batch_size, news_num, news_embedding_dim]
+    # Output: [batch_size, news_num, intent_embedding_dim] * k
+    # Apply k-FC layer for k-intent disentanglement
+    def k_intent_disentangle(self, intent_num, news_embedding):                                 
+        k_intent_embeddings = []
+        for i in range(intent_num):
+            # Apply different linear transformations for each intent
+            intent_embedding = F.relu(self.intent_layers[i](news_embedding), inplace=True)         
+            k_intent_embeddings.append(intent_embedding)
+        
+        return k_intent_embeddings                                                              
+
+    def intent_attention(self, intent_num, k_intent_embeddings):
+        k_intent_embeddings = k_intent_embeddings[:intent_num]
+        feature = torch.stack(k_intent_embeddings, dim=2)                                                   # [batch_size, news_num, k, intent_embedding_dim]
+        # Apply attention mechanism to calculate attention score(intent distribution) -> weighted sum
+        intent_distribution = F.softmax(self.affine2(torch.tanh(self.affine1(feature))), dim=2)             # [batch_size, news_num, 1]
+        intent_embedding = (feature * intent_distribution).sum(dim=2, keepdim=False)                        # [batch_size, news_num, intent_embedding_dim]
+
+        return intent_embedding                                                                             # [batch_size, news_num, intent_embedding_dim]
 
     def forward(self, title_text, title_mask, title_entity, content_text, content_mask, content_entity, category, subCategory, user_embedding):
         batch_size = title_text.size(0)
         news_num = title_text.size(1)
         batch_news_num = batch_size * news_num
-        t_mask = title_mask.view([batch_news_num, self.max_title_length])                                                       # [batch_size * news_num, max_sentence_length]
-        b_mask = content_mask.view([batch_news_num, self.max_body_length]) 
+        t_mask = title_mask.view([batch_news_num, self.max_title_length])                                   # [batch_size * news_num, max_title_length]
+        b_mask = content_mask.view([batch_news_num, self.max_body_length])                                  # [batch_size * news_num, max_body_length]
         
         # (1) Word embedding
         # to convert a news title from a word sequence into a sequence of dense semantic vectors
-        title_w = self.dropout(self.word_embedding(title_text)).view([batch_news_num, self.max_title_length, self.word_embedding_dim])                       # [batch_size * news_num, max_title_length, word_embedding_dim]
-        body_w = self.dropout(self.word_embedding(content_text)).view([batch_news_num, self.max_body_length, self.word_embedding_dim])                       # [batch_size * news_num, max_content_length, word_embedding_dim]
+        title_w = self.dropout(self.word_embedding(title_text)).view([batch_news_num, self.max_title_length, self.word_embedding_dim])  # [batch_size * news_num, max_title_length, word_embedding_dim]
+        body_w = self.dropout(self.word_embedding(content_text)).view([batch_news_num, self.max_body_length, self.word_embedding_dim])  # [batch_size * news_num, max_content_length, word_embedding_dim]
         
         # (2) CNN encoding
         # to learn contextual word representations by capturing the local context information
-        # title_c = self.dropout_(self.title_conv(title_w.permute(0, 2, 1)).permute(0, 2, 1))                                                               # [batch_size * news_num, max_title_length, cnn_kernel_num]
-        # body_c = self.dropout_(self.body_conv(body_w.permute(0, 2, 1)).permute(0, 2, 1))                                                                  # [batch_size * news_num, max_content_length, cnn_kernel_num]
+        # title_c = self.dropout_(self.title_conv(title_w.permute(0, 2, 1)).permute(0, 2, 1))         # [batch_size * news_num, max_title_length, cnn_kernel_num]
+        # body_c = self.dropout_(self.body_conv(body_w.permute(0, 2, 1)).permute(0, 2, 1))            # [batch_size * news_num, max_content_length, cnn_kernel_num]
 
         # (2) Multi-Head Self Attention encoding (adopt)
         # to learn contextual representations of words by capturing their interactions
         # (such long-distance interactions usually can not be captured by CNN)
-        title_m = self.dropout(self.title_multiheadAttention(title_w, title_w, title_w, t_mask))                                                               # [batch_size * news_num, max_title_length, news_embedding_dim]
-        body_m = self.dropout(self.body_multiheadAttention(body_w, body_w, body_w, b_mask))                                                                    # [batch_size * news_num, max_content_length, news_embedding_dim]
-
-        # (3) Category-aware intent disentanglement
-        # Intra(inter)-category intent distribution / *** LDA 조사해서 intent distribution를 LDA로 가능한 지 확인 ***
-        # (: 카테고리에 따라 intent의 분포가 다를 수 있음, 뉴스 기사마다 다양한 intent(k개)가 공존하고 이걸 잘 분리해보겠다는 것)
-        # (예를 들어 날씨/교통/스포츠와 같은 뉴스는 정보전달을 주로하고, 정치/사회 뉴스는 관심을 유도하기 위해 다소 자극적으로 작성됨)
-        # (즉, category에 따라서 기사들의 intent 가 달라질 수 있고, 이를 반영할 수 있어야함.)
-        # News articles with the same (different) category have (dis)similar intent distribution
+        title_m = self.dropout(self.title_multiheadAttention(title_w, title_w, title_w, t_mask))      # [batch_size * news_num, max_title_length, news_embedding_dim]
+        body_m = self.dropout(self.body_multiheadAttention(body_w, body_w, body_w, b_mask))           # [batch_size * news_num, max_content_length, news_embedding_dim]
         
-        
-        
-        # (before) 89,90라인 날리기, set transformer, Multi-head Attention Block(MAB)(self-attention 2번) 수식 고려해서 적용해보기 than naive MHSA
-        #                  + 
-        #    23.08.18 논의 내용 정리 (코드 구현 플로우)
-        # 0. 실험 결과 계속 test해보면서 긍정적인 상황인지 careful하게 접근하기 + MAB 적용해볼 수 있으면 해보기 + 왜 좋은건지 짧게 설명가능 하도록
-        # 1. Category-Title embedding concat , Category-Body embedding concat
-        # 2. input: each C-T/C-B embedding -> k-linear layers(= k-intent layers for disentanglement) -> output: k-category-aware C-T/C-B intent embeddings
-        # 3. input: k-category-aware C-T/C-B intent embeddings -> Attention layer(or MAB), att_score = intent distribution -> output: Title embedding, Body embedding
-        # 4. input: Title embedding, Body embedding -> concat -> output: news embedding 
-        #                  +
-        # (after) k-intents가 서로 멀어지도록 (학습)하는 방법 구상, Title-Body 유사할수록 Body를 더 많이 반영하도록 하는 방법 구상
-        
-        
-        
-        # (4) Intent-distribution based title-body similarity
-        # How similar/different are the intent distributions of the title and body?
-        # title이 body와 유사하면 body를 더 반영, body와 유사하지 않으면 title을 더 반영하도록?
-        
-        
-        # (5) Attention layer
-        # word-level attention network to select important words in news titles to learn more informative news representations
-        
+        # (3) Word-level Attention encoding
+        # to select important words in news titles to learn more informative news representations
         # title_representation = self.title_attention(title_c).view([batch_size, news_num, self.cnn_kernel_num])                              # [batch_size, news_num, cnn_kernel_num]          for CNN encoding
         # body_representation = self.body_attention(body_c).view([batch_size, news_num, self.cnn_kernel_num])                                 # [batch_size, news_num, cnn_kernel_num]          for CNN encoding
-        title_representation = self.title_attention(title_m, mask=t_mask).view([batch_size, news_num, self.feature_dim])                      # [batch_size, news_num, news_embedding_dim]      for MH-Attention
-        body_representation = self.body_attention(body_m, mask=b_mask).view([batch_size, news_num, self.feature_dim])                         # [batch_size, news_num, news_embedding_dim]      for MH-Attention
+        title_embedding = self.title_attention(title_m, mask=t_mask).view([batch_size, news_num, self.feature_dim])                           # [batch_size, news_num, news_embedding_dim]      for MH-Attention
+        body_embedding = self.body_attention(body_m, mask=b_mask).view([batch_size, news_num, self.feature_dim])                              # [batch_size, news_num, news_embedding_dim]      for MH-Attention
         
-        category_representation = F.relu(self.category_affine(self.category_embedding(category)), inplace=True)                              # [batch_size, news_num, cnn_kernel_num(news_embedding_dim)]
-        subCategory_representation = F.relu(self.subCategory_affine(self.subCategory_embedding(subCategory)), inplace=True)                  # [batch_size, news_num, cnn_kernel_num(news_embedding_dim)]
         
-        # (6) Feature fusion
-        # news_representation = self.feature_fusion(news_representation, category, subCategory)                                              # [batch_size, news_num, news_embedding_dim]
-        feature = torch.stack([title_representation, body_representation, category_representation, subCategory_representation], dim=2)
-        alpha = F.softmax(self.affine2(torch.tanh(self.affine1(feature))), dim=2)
-        news_representation = (feature * alpha).sum(dim=2, keepdim=False)
+        # (4) Category-aware intent disentanglement
+        ### (before) 89,90라인 날리기, set transformer, Multi-head Attention Block(MAB)(self-attention 2번) 수식 고려해서 적용해보기 instead of naive MHSA
+        ###                  + 
+        ###    23.08.18 논의 내용 정리 (코드 구현 플로우)
+        ### 0. 실험 결과 계속 test해보면서 긍정적인 상황인지 careful하게 접근하기 + MAB 적용해볼 수 있으면 해보기 + 왜 좋은건지 짧게 설명가능 하도록
+        ### 1. input: Category embedding, Title(Body) embedding -> concat -> output: Category-Title(Body) embedding
+        category_title_embedding = self.category_title_concat(title_embedding, category, subCategory)     # [batch_size, news_num, news(title)_embedding_dim] 400+50+50=500
+        category_body_embedding = self.category_body_concat(body_embedding, category, subCategory)        # [batch_size, news_num, news(body)_embedding_dim] 400+50+50=500
+        
+        ### 2. input: each C-T/C-B embedding -> k-linear layers(= k-intent layers for disentanglement) -> output: k-category-aware C-T/C-B intent embeddings (# of intents = # of fully connencted layers)
+        t_k = self.intent_num
+        b_k = self.intent_num
+        title_k_intent_embeddings = self.k_intent_disentangle(t_k, category_title_embedding)              # [batch_size, news_num, intent_embedding_dim] * k 
+        body_k_intent_embeddings = self.k_intent_disentangle(b_k, category_body_embedding)                # [batch_size, news_num, intent_embedding_dim] * k 
+        
+        # (5) Intent-distribution based Attention
+        ### 3. input: k-category-aware C-T/C-B intent embeddings -> Attention layer(MHSA or MAB), att_score = intent distribution -> output: Title embedding, Body embedding
+        title_intent_embedding = self.intent_attention(t_k, title_k_intent_embeddings)                    # [batch_size, news_num, intent_embedding_dim]
+        body_intent_embedding = self.intent_attention(b_k, body_k_intent_embeddings)                      # [batch_size, news_num, intent_embedding_dim]
+        
+        # (6) Title-Body similarity (todo)
+        
+        ### 4. input: Title embedding, Body embedding -> concat -> output: news representation embedding
+        news_representation = torch.cat([self.dropout(title_intent_embedding), self.dropout(body_intent_embedding)], dim=2)      # [batch_size, news_num, news_embedding_dim] 200+200=400
+        
+        ###                  +
+        ### (after) k-intents가 서로 멀어지도록 (학습)하는 방법 구상, Title-Body 유사할수록 Body를 더 많이 반영하도록 하는 방법 구상 instead of naive concat T-B
+        ### How similar are the intent distributions of the title and body?
         
         return news_representation
+
 
 
 # Collaborative News Encoding(CNE)
