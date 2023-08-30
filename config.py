@@ -38,7 +38,7 @@ class Config:
         parser.add_argument('--world_size', type=int, default=1, help='World size of multi-process GPU training')
         # Dev config
         parser.add_argument('--dev_criterion', type=str, default='auc', choices=['auc', 'mrr', 'ndcg5', 'ndcg10', 'avg'], help='Validation criterion to select model')
-        parser.add_argument('--early_stopping_epoch', type=int, default=10, help='Epoch number of stop training after dev result does not improve')
+        parser.add_argument('--early_stopping_epoch', type=int, default=6, help='Epoch number of stop training after dev result does not improve')
         # Model config
         parser.add_argument('--word_embedding_dim', type=int, default=300, choices=[50, 100, 200, 300], help='Word embedding dimension')
         parser.add_argument('--entity_embedding_dim', type=int, default=100, choices=[100], help='Entity embedding dimension')
@@ -87,13 +87,13 @@ class Config:
             self.test_root = '../MIND-small/test'
             self.max_history_num = 40
         elif self.dataset in ['adressa2']:
-            # for Adressa2 (test)
+            # for Adressa2 (adopt)
             self.train_root = '../Adressa-sample/train'
             self.dev_root = '../Adressa-sample/dev'
             self.test_root = '../Adressa-sample/test'
             self.max_history_num = 40
         else:
-            # for Adressa
+            # for Adressa (test)
             self.train_root = '../Adressa-small/train'
             self.dev_root = '../Adressa-small/dev'
             self.test_root = '../Adressa-small/test'
@@ -102,14 +102,15 @@ class Config:
         if self.dataset in ['mind']:
             self.dropout_rate = 0.25
             self.gcn_layer_num = 3
-        elif self.dataset in ['adressa', 'adressa2']:
-            self.dropout_rate = 0.1
-            self.gcn_layer_num = 4
             self.epoch = 16
+            self.early_stopping_epoch = 6
+        elif self.dataset in ['adressa', 'adressa2']:
+            self.dropout_rate = 0.2
+            self.gcn_layer_num = 4
         else: 
             self.dropout_rate = 0.1
             self.gcn_layer_num = 4
-            self.epoch = 10
+            self.epoch = 16
         self.seed = self.seed if self.seed >= 0 else (int)(time.time())
         self.attribute_dict['dropout_rate'] = self.dropout_rate
         self.attribute_dict['gcn_layer_num'] = self.gcn_layer_num
