@@ -116,15 +116,15 @@ class CIDER(NewsEncoder):
     def category_title_concat(self, title_embedding, category, subCategory):
         category_representation = self.category_embedding(category)                                                                                    # [batch_size, news_num, category_embedding_dim] 50
         subCategory_representation = self.subCategory_embedding(subCategory)                                                                           # [batch_size, news_num, subCategory_embedding_dim] 50
-        # title_embedding = torch.cat([title_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)         # [batch_size, news_num, title_embedding_dim = title+cat+subcat] 400+100=500
-        title_embedding = torch.cat([title_embedding, category_representation, subCategory_representation], dim=2)
+        title_embedding = torch.cat([title_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)         # [batch_size, news_num, title_embedding_dim = title+cat+subcat] 400+100=500
+        # title_embedding = torch.cat([title_embedding, category_representation, subCategory_representation], dim=2)
         return title_embedding
 
     def category_body_concat(self, body_embedding, category, subCategory):
         category_representation = self.category_embedding(category)                                                                                    # [batch_size, news_num, category_embedding_dim]
         subCategory_representation = self.subCategory_embedding(subCategory)                                                                           # [batch_size, news_num, subCategory_embedding_dim]
-        # body_embedding = torch.cat([body_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)           # [batch_size, news_num, body_embedding_dim]
-        body_embedding = torch.cat([body_embedding, category_representation, subCategory_representation], dim=2)
+        body_embedding = torch.cat([body_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)           # [batch_size, news_num, body_embedding_dim]
+        # body_embedding = torch.cat([body_embedding, category_representation, subCategory_representation], dim=2)
         return body_embedding
     
     # Input: [batch_size, news_num, news_embedding_dim]
