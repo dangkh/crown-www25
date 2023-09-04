@@ -116,13 +116,15 @@ class CIDER(NewsEncoder):
     def category_title_concat(self, title_embedding, category, subCategory):
         category_representation = self.category_embedding(category)                                                                                    # [batch_size, news_num, category_embedding_dim] 50
         subCategory_representation = self.subCategory_embedding(subCategory)                                                                           # [batch_size, news_num, subCategory_embedding_dim] 50
-        title_embedding = torch.cat([title_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)         # [batch_size, news_num, title_embedding_dim = title+cat+subcat] 400+100=500
+        # title_embedding = torch.cat([title_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)         # [batch_size, news_num, title_embedding_dim = title+cat+subcat] 400+100=500
+        title_embedding = torch.cat([title_embedding, category_representation, subCategory_representation], dim=2)
         return title_embedding
 
     def category_body_concat(self, body_embedding, category, subCategory):
         category_representation = self.category_embedding(category)                                                                                    # [batch_size, news_num, category_embedding_dim]
         subCategory_representation = self.subCategory_embedding(subCategory)                                                                           # [batch_size, news_num, subCategory_embedding_dim]
-        body_embedding = torch.cat([body_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)           # [batch_size, news_num, body_embedding_dim]
+        # body_embedding = torch.cat([body_embedding, self.dropout(category_representation), self.dropout(subCategory_representation)], dim=2)           # [batch_size, news_num, body_embedding_dim]
+        body_embedding = torch.cat([body_embedding, category_representation, subCategory_representation], dim=2)
         return body_embedding
     
     # Input: [batch_size, news_num, news_embedding_dim]
@@ -136,16 +138,30 @@ class CIDER(NewsEncoder):
             k_intent_embeddings.append(intent_embedding)
         
         return k_intent_embeddings                                                              
-
+    # 현재는 single -> 이후 tuning 형태로 multi (각 어떻게 생겼는지 말할 수 있어야 함)
+    # intent_distribution도 같이
     def intent_attention(self, intent_num, k_intent_embeddings):
         k_intent_embeddings = k_intent_embeddings[:intent_num]
         feature = torch.stack(k_intent_embeddings, dim=2)                                                   # [batch_size, news_num, k, intent_embedding_dim]
         # Apply attention mechanism to calculate attention score(intent distribution) -> weighted attention
         intent_distribution = F.softmax(self.affine2(torch.tanh(self.affine1(feature))), dim=2)             # [batch_size, news_num, 1]
         intent_embedding = (feature * intent_distribution).sum(dim=2, keepdim=False)                        # [batch_size, news_num, intent_embedding_dim]
+        
+        return intent_embedding, intent_distribution                                                        # [batch_size, news_num, intent_embedding_dim], [batch_size, news_num, 1]
 
-        return intent_embedding                                                                             # [batch_size, news_num, intent_embedding_dim]
-
+    def similarity_compute(self, title_intent_distribution, body_intent_distribution):                            # [batch_size, news_num, 1]
+        cosine_similarity = F.cosine_similarity(title_intent_distribution, body_intent_distribution, dim=2)
+        # similarity normalization
+        threshold = 0.5
+        title_body_similarity = (cosine_similarity + 1) / 2.0
+        min_similarity = torch.min(title_body_similarity)
+        max_similarity = torch.max(title_body_similarity)
+        scaled_title_body_similarity = torch.where(title_body_similarity == 0, 
+                                                   threshold,
+                                                   (title_body_similarity - min_similarity) / (max_similarity - min_similarity))
+        
+        return scaled_title_body_similarity                                                                        # [batch_size, news_num, 1]
+    
     def forward(self, title_text, title_mask, title_entity, content_text, content_mask, content_entity, category, subCategory, user_embedding):
         batch_size = title_text.size(0)
         news_num = title_text.size(1)
@@ -153,10 +169,12 @@ class CIDER(NewsEncoder):
         t_mask = title_mask.view([batch_news_num, self.max_title_length])                                   # [batch_size * news_num, max_title_length]
         b_mask = content_mask.view([batch_news_num, self.max_body_length])                                  # [batch_size * news_num, max_body_length]
         
+        # (추기) Body는 word-level + sentence-level로 구현해보기 (hierarchical하게 self-attention) + knowledge?(초기 임베딩에 지식 주입 가능하면 주입해서 시작)
+        
         # (1) Word embedding
         # to convert a news title from a word sequence into a sequence of dense semantic vectors
-        title_w = self.dropout(self.word_embedding(title_text)).view([batch_news_num, self.max_title_length, self.word_embedding_dim])  # [batch_size * news_num, max_title_length, word_embedding_dim]
-        body_w = self.dropout(self.word_embedding(content_text)).view([batch_news_num, self.max_body_length, self.word_embedding_dim])  # [batch_size * news_num, max_content_length, word_embedding_dim]
+        title_w = self.dropout(self.word_embedding(title_text)).view([batch_news_num, self.max_title_length, self.word_embedding_dim])          # [batch_size * news_num, max_title_length, word_embedding_dim]
+        body_w = self.dropout(self.word_embedding(content_text)).view([batch_news_num, self.max_body_length, self.word_embedding_dim])          # [batch_size * news_num, max_content_length, word_embedding_dim]
         
         # (2) CNN encoding
         # to learn contextual word representations by capturing the local context information
@@ -194,19 +212,21 @@ class CIDER(NewsEncoder):
         
         # (5) Intent-distribution based Attention
         ### 3. input: k-category-aware C-T/C-B intent embeddings -> Attention layer(MHSA or MAB), att_score = intent distribution 
-        ### -> output: Title embedding, Body embedding
-        title_intent_embedding = self.intent_attention(t_k, title_k_intent_embeddings)                    # [batch_size, news_num, intent_embedding_dim]
-        body_intent_embedding = self.intent_attention(b_k, body_k_intent_embeddings)                      # [batch_size, news_num, intent_embedding_dim]
+        ### -> output: Title/body embedding, Title/body intent distribution for similarity computation
+        title_intent_embedding, title_intent_distribution = self.intent_attention(t_k, title_k_intent_embeddings)                    # [batch_size, news_num, intent_embedding_dim]
+        body_intent_embedding, body_intent_distribution = self.intent_attention(b_k, body_k_intent_embeddings)                      # [batch_size, news_num, intent_embedding_dim]
         
-        # (6) Title-Body similarity (todo)
+        # (6) Title-Body similarity computation (todo)
+        # 두 distribution의 cosine or jaccard or euclidean distance similarity 계산 
+        ### 4. input: Title/body intent distribution -> similarity computation
+        ### -> output: similarity score (0~1)
+        title_body_similarity = self.similarity_compute(title_intent_distribution, body_intent_distribution) # [batch_size, news_num, 1]
+        # print('title_body_similarity: ', title_body_similarity)
+        # exit()
         
-        ### 4. input: Title embedding, Body embedding -> concat 
+        ### 5. input: Title embedding, Body embedding -> concat 
         ### -> output: news representation embedding
-        news_representation = torch.cat([self.dropout(title_intent_embedding), self.dropout(body_intent_embedding)], dim=2)      # [batch_size, news_num, news_embedding_dim] 200+200=400
-        
-        ###
-        ### (after) k-intents가 서로 멀어지도록 (학습)하는 방법 구상, Title-Body 유사할수록 Body를 더 많이 반영하도록 하는 방법 구상 instead of naive concat T-B
-        ### How similar are the intent distributions of the title and body?
+        news_representation = torch.cat([title_intent_embedding, title_body_similarity * body_intent_embedding], dim=2)      # [batch_size, news_num, intent_embedding_dim + intent_embedding_dim] 200+200=400        
         
         return news_representation
 
