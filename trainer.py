@@ -25,6 +25,7 @@ class Trainer:
         self.negative_sample_num = config.negative_sample_num
         self.loss = self.negative_log_softmax if config.click_predictor in ['dot_product', 'mlp', 'FIM'] else self.negative_log_sigmoid
         self.optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=config.lr, weight_decay=config.weight_decay)
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.5, patience=3, verbose=True)
         self._dataset = config.dataset
         self._corpus = corpus
         self.train_dataset = Train_Dataset(corpus)
@@ -120,7 +121,7 @@ class Trainer:
                 self.optimizer.step()
             print('Epoch %d : train done' % e)
             print('loss =', epoch_loss / len(self.train_dataset))
-
+            
             # validation
             auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size * 3 // 2, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset)
             self.auc_results.append(auc)
@@ -130,6 +131,7 @@ class Trainer:
             print('Epoch %d : dev done\nDev criterions' % e)
             print('AUC = {:.4f}\nMRR = {:.4f}\nnDCG@5 = {:.4f}\nnDCG@10 = {:.4f}'.format(auc, mrr, ndcg5, ndcg10))
             if self.dev_criterion == 'auc':
+                self.scheduler.step(auc)
                 if auc >= self.best_dev_auc:
                     self.best_dev_auc = auc
                     self.best_dev_epoch = e
@@ -137,8 +139,10 @@ class Trainer:
                         result_f.write('#' + str(self.run_index) + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
                     self.epoch_not_increase = 0
                 else:
+                    
                     self.epoch_not_increase += 1
             elif self.dev_criterion == 'mrr':
+                self.scheduler.step(mrr)
                 if mrr >= self.best_dev_mrr:
                     self.best_dev_mrr = mrr
                     self.best_dev_epoch = e
@@ -148,6 +152,7 @@ class Trainer:
                 else:
                     self.epoch_not_increase += 1
             elif self.dev_criterion == 'ndcg5':
+                self.scheduler.step(ndcg5)
                 if ndcg5 >= self.best_dev_ndcg5:
                     self.best_dev_ndcg5 = ndcg5
                     self.best_dev_epoch = e
@@ -157,6 +162,7 @@ class Trainer:
                 else:
                     self.epoch_not_increase += 1
             elif self.dev_criterion == 'ndcg10':
+                self.scheduler.step(ndcg10)
                 if ndcg10 >= self.best_dev_ndcg10:
                     self.best_dev_ndcg10 = ndcg10
                     self.best_dev_epoch = e
@@ -167,6 +173,7 @@ class Trainer:
                     self.epoch_not_increase += 1
             else:
                 avg = AvgMetric(auc, mrr, ndcg5, ndcg10)
+                self.scheduler.step(avg)
                 if avg >= self.best_dev_avg:
                     self.best_dev_avg = avg
                     self.best_dev_epoch = e
