@@ -61,21 +61,15 @@ def test(config: Config, corpus: Corpus):
         os.mkdir(test_res_dir)
     print('test model path  : ' + config.test_model_path)
     print('test output file : ' + test_res_dir + '/' + model.model_name + '.txt')
-    auc, mrr, ndcg5, ndcg10 = compute_scores(model, corpus, config.batch_size * 2 // config.world_size, 'test', test_res_dir + '/' + model.model_name + '.txt', config.dataset)
-    if config.dataset != 'large':
-        print('AUC : %.4f\nMRR : %.4f\nnDCG@5 : %.4f\nnDCG@10 : %.4f' % (auc, mrr, ndcg5, ndcg10))
-        if config.mode == 'train':
-            with open(config.result_dir + '/#' + str(config.run_index) + '-test', 'w') as result_f:
-                result_f.write('#' + str(config.run_index) + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
-        elif config.mode == 'test' and config.test_output_file != '':
-            with open(config.test_output_file, 'w', encoding='utf-8') as f:
-                f.write('#' + str(config.seed + 1) + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
-    else:
-        if config.mode == 'train':
-            shutil.copy(test_res_dir + '/' + model.model_name + '.txt', 'prediction/large/%s/#%d/prediction.txt' % (model.model_name, config.run_index))
-            os.chdir('prediction/large/%s/#%d' % (model.model_name, config.run_index))
-            os.system('zip prediction.zip prediction.txt')
-            os.chdir('../../../..')
+    auc, mrr, ndcg5, ndcg10 = compute_scores(model, corpus, config.batch_size, 'test', test_res_dir + '/' + model.model_name + '.txt', config.dataset)
+    
+    print('AUC : %.4f\nMRR : %.4f\nnDCG@5 : %.4f\nnDCG@10 : %.4f' % (auc, mrr, ndcg5, ndcg10))
+    if config.mode == 'train':
+        with open(config.result_dir + '/#' + str(config.run_index) + '-test', 'w') as result_f:
+            result_f.write('#' + str(config.run_index) + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
+    elif config.mode == 'test':
+        with open(config.test_output_file, 'w', encoding='utf-8') as f:
+            f.write('#18' + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
 
 # main.py
 # function: 뉴스 추천 모델을 학습, 검증, 테스트
@@ -87,4 +81,6 @@ if __name__ == '__main__':
         config.test_model_path = config.best_model_dir + '/#' + str(config.run_index) + '/' + config.news_encoder + '-' + config.user_encoder
         test(config, data_corpus)
     elif config.mode == 'test':
+        config.test_model_path = 'best_model/adressa2/CIDER-CIDER/#18/CIDER-CIDER'
+        config.test_output_file = 'results/adressa2/CIDER-CIDER/#18-test'
         test(config, data_corpus)

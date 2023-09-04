@@ -22,23 +22,23 @@ class Config:
         parser.add_argument('--seed', type=int, default=0, help='Seed for random number generator')
         parser.add_argument('--config_file', type=str, default='', help='Config file path')
         # Dataset config
-        parser.add_argument('--dataset', type=str, default='adressa2', choices=['mind', 'adressa', 'adressa2'], help='Dataset type') #small
+        parser.add_argument('--dataset', type=str, default='adressa2', choices=['mind', 'adressa', 'adressa2'], help='Dataset type')
         parser.add_argument('--tokenizer', type=str, default='MIND', choices=['MIND', 'NLTK'], help='Sentence tokenizer')
         parser.add_argument('--word_threshold', type=int, default=3, help='Word threshold')
         parser.add_argument('--max_title_length', type=int, default=32, help='Sentence truncate length for title')
-        parser.add_argument('--max_abstract_length', type=int, default=64, help='Sentence truncate length for abstract') #128
+        parser.add_argument('--max_abstract_length', type=int, default=128, help='Sentence truncate length for abstract') #128
         # Training config
         parser.add_argument('--negative_sample_num', type=int, default=4, help='Negative sample number of each positive sample')
-        parser.add_argument('--max_history_num', type=int, default=40, help='Maximum number of history news for each user') #50
-        parser.add_argument('--epoch', type=int, default=16, help='Training epoch')
-        parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
+        parser.add_argument('--max_history_num', type=int, default=40, help='Maximum number of history news for each user')
+        parser.add_argument('--epoch', type=int, default=10, help='Training epoch')
+        parser.add_argument('--batch_size', type=int, default=28, help='Batch size')
         parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
         parser.add_argument('--weight_decay', type=float, default=0, help='Optimizer weight decay')
         parser.add_argument('--gradient_clip_norm', type=float, default=4, help='Gradient clip norm (non-positive value for no clipping)')
         parser.add_argument('--world_size', type=int, default=1, help='World size of multi-process GPU training')
         # Dev config
         parser.add_argument('--dev_criterion', type=str, default='auc', choices=['auc', 'mrr', 'ndcg5', 'ndcg10', 'avg'], help='Validation criterion to select model')
-        parser.add_argument('--early_stopping_epoch', type=int, default=6, help='Epoch number of stop training after dev result does not improve')
+        parser.add_argument('--early_stopping_epoch', type=int, default=5, help='Epoch number of stop training after dev result does not improve')
         # Model config
         parser.add_argument('--word_embedding_dim', type=int, default=300, choices=[50, 100, 200, 300], help='Word embedding dimension')
         parser.add_argument('--entity_embedding_dim', type=int, default=100, choices=[100], help='Entity embedding dimension')
@@ -47,14 +47,14 @@ class Config:
         parser.add_argument('--cnn_kernel_num', type=int, default=400, help='Number of CNN kernel')
         parser.add_argument('--cnn_window_size', type=int, default=3, help='Window size of CNN kernel')
         parser.add_argument('--attention_dim', type=int, default=200, help="Attention dimension")
-        parser.add_argument('--head_num', type=int, default=20, help='Head number of multi-head self-attention')
-        parser.add_argument('--head_dim', type=int, default=20, help='Head dimension of multi-head self-attention')
+        parser.add_argument('--head_num', type=int, default=20, help='Head number of multi-head self-attention')    #20  #4    #8   #16  #40
+        parser.add_argument('--head_dim', type=int, default=20, help='Head dimension of multi-head self-attention') #20  #100  #50  #25  #10
         parser.add_argument('--intent_embedding_dim', type=int, default=200, help='K-intent embedding dimension')
         parser.add_argument('--intent_num', type=int, default=3, help='Number of title/body intent(k)')
         parser.add_argument('--user_embedding_dim', type=int, default=50, help='User embedding dimension')
         parser.add_argument('--category_embedding_dim', type=int, default=50, help='Category embedding dimension')
         parser.add_argument('--subCategory_embedding_dim', type=int, default=50, help='SubCategory embedding dimension')
-        parser.add_argument('--dropout_rate', type=float, default=0.2, help='Dropout rate')
+        parser.add_argument('--dropout_rate', type=float, default=0.1, help='Dropout rate')
         parser.add_argument('--no_self_connection', default=False, action='store_true', help='Whether the graph contains self-connection')
         parser.add_argument('--no_adjacent_normalization', default=False, action='store_true', help='Whether normalize the adjacent matrix')
         parser.add_argument('--gcn_normalization_type', type=str, default='symmetric', choices=['symmetric', 'asymmetric'], help='GCN normalization for adjacent matrix A (\"symmetric\" for D^{-\\frac{1}{2}}AD^{-\\frac{1}{2}}; \"asymmetric\" for D^{-\\frac{1}{2}}A)')
@@ -105,10 +105,10 @@ class Config:
             self.epoch = 16
             self.early_stopping_epoch = 6
         elif self.dataset in ['adressa', 'adressa2']:
-            self.dropout_rate = 0.2
+            # self.dropout_rate = 0.2
             self.gcn_layer_num = 4
         else: 
-            self.dropout_rate = 0.1
+            self.dropout_rate = 0.2
             self.gcn_layer_num = 4
             self.epoch = 16
         self.seed = self.seed if self.seed >= 0 else (int)(time.time())
