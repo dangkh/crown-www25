@@ -30,8 +30,8 @@ class Config:
         # Training config
         parser.add_argument('--negative_sample_num', type=int, default=4, help='Negative sample number of each positive sample')
         parser.add_argument('--max_history_num', type=int, default=40, help='Maximum number of history news for each user')
-        parser.add_argument('--epoch', type=int, default=10, help='Training epoch')
-        parser.add_argument('--batch_size', type=int, default=28, help='Batch size')
+        parser.add_argument('--epoch', type=int, default=12, help='Training epoch')
+        parser.add_argument('--batch_size', type=int, default=32, help='Batch size') # 28
         parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
         parser.add_argument('--weight_decay', type=float, default=0, help='Optimizer weight decay')
         parser.add_argument('--gradient_clip_norm', type=float, default=4, help='Gradient clip norm (non-positive value for no clipping)')
@@ -47,9 +47,11 @@ class Config:
         parser.add_argument('--cnn_kernel_num', type=int, default=400, help='Number of CNN kernel')
         parser.add_argument('--cnn_window_size', type=int, default=3, help='Window size of CNN kernel')
         parser.add_argument('--attention_dim', type=int, default=200, help="Attention dimension")
-        parser.add_argument('--head_num', type=int, default=20, help='Head number of multi-head self-attention')    #20  #4    #8   #16  #40
-        parser.add_argument('--head_dim', type=int, default=20, help='Head dimension of multi-head self-attention') #20  #100  #50  #25  #10
-        parser.add_argument('--intent_embedding_dim', type=int, default=200, help='K-intent embedding dimension')
+        parser.add_argument('--feedforward_dim', type=int, default=512, choices=[64, 128, 512, 1024], help="The dimension of the feedforward network model")
+        parser.add_argument('--num_layers', type=int, default=1, help="The number of sub-encoder-layers in transformer encoder")
+        parser.add_argument('--head_num', type=int, default=10, help='Head number of multi-head self-attention')    #20  #4    #8   #16  #40
+        parser.add_argument('--head_dim', type=int, default=40, help='Head dimension of multi-head self-attention') #20  #100  #50  #25  #10
+        parser.add_argument('--intent_embedding_dim', type=int, default=400, help='K-intent embedding dimension')
         parser.add_argument('--intent_num', type=int, default=3, help='Number of title/body intent(k)')
         parser.add_argument('--user_embedding_dim', type=int, default=50, help='User embedding dimension')
         parser.add_argument('--category_embedding_dim', type=int, default=50, help='Category embedding dimension')
@@ -103,7 +105,8 @@ class Config:
             self.dropout_rate = 0.25
             self.gcn_layer_num = 3
             self.epoch = 16
-            self.early_stopping_epoch = 6
+            self.early_stopping_epoch = 5
+            self.max_abstract_length = 64
         elif self.dataset in ['adressa', 'adressa2']:
             # self.dropout_rate = 0.2
             self.gcn_layer_num = 4

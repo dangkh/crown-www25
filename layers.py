@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class Conv1D(nn.Module):
     def __init__(self, cnn_method: str, in_channels: int, cnn_kernel_num: int, cnn_window_size: int):
         super(Conv1D, self).__init__()
@@ -98,16 +97,15 @@ class Conv2D_Pool(nn.Module):
             conv4_relu_pool, _ = torch.max(conv4_relu[:, :, :length - 3], dim=2, keepdim=False)
             return torch.cat([conv1_relu_pool, conv2_relu_pool, conv3_relu_pool, conv4_relu_pool], dim=1)
 
-
 class MultiHeadAttention(nn.Module):
     def __init__(self, h: int, d_model: int, len_q: int, len_k: int, d_k: int, d_v: int):
         super(MultiHeadAttention, self).__init__()
-        self.h = h
-        self.d_model = d_model
-        self.len_q = len_q
-        self.len_k = len_k
-        self.d_k = d_k
-        self.d_v = d_v
+        self.h = h                  # head_num                  O
+        self.d_model = d_model      # word_embedding_dim        O
+        self.len_q = len_q          # max_title_length
+        self.len_k = len_k          # max_title_length
+        self.d_k = d_k              # head_dim                  O
+        self.d_v = d_v              # head_dim                  O
         self.out_dim = self.h * self.d_v
         self.attention_scalar = math.sqrt(float(self.d_k))
         self.W_Q = nn.Linear(d_model, self.h*self.d_k, bias=True)
@@ -146,6 +144,8 @@ class MultiHeadAttention(nn.Module):
         out = torch.bmm(alpha, V).view([batch_size, self.h, self.len_q, self.d_v])                                 # [batch_size, h, len_q, d_v]
         out = out.permute([0, 2, 1, 3]).contiguous().view([batch_size, self.len_q, self.out_dim])                  # [batch_size, len_q, h * d_v]
         return out
+
+
 
 
 class Attention(nn.Module):

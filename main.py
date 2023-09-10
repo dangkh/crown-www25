@@ -61,7 +61,7 @@ def test(config: Config, corpus: Corpus):
         os.mkdir(test_res_dir)
     print('test model path  : ' + config.test_model_path)
     print('test output file : ' + test_res_dir + '/' + model.model_name + '.txt')
-    auc, mrr, ndcg5, ndcg10 = compute_scores(model, corpus, config.batch_size, 'test', test_res_dir + '/' + model.model_name + '.txt', config.dataset)
+    auc, mrr, ndcg5, ndcg10 = compute_scores(model, corpus, config.batch_size * 5 // 2, 'test', test_res_dir + '/' + model.model_name + '.txt', config.dataset) # config.batch_size * 3 // 2 (.8391, 3524MiB)
     
     print('AUC : %.4f\nMRR : %.4f\nnDCG@5 : %.4f\nnDCG@10 : %.4f' % (auc, mrr, ndcg5, ndcg10))
     if config.mode == 'train':

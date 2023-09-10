@@ -76,7 +76,7 @@ class Trainer:
         model = self.model
         for e in tqdm(range(1, self.epoch + 1)):
             self.train_dataset.negative_sampling()
-            train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=8, pin_memory=True)
+            train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.batch_size // 16, pin_memory=True)
             model.train()
             epoch_loss = 0
             for (user_ID, user_category, user_subCategory, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, \
@@ -123,7 +123,7 @@ class Trainer:
             print('loss =', epoch_loss / len(self.train_dataset))
             
             # validation
-            auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size * 3 // 2, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset)
+            auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size * 2, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset) # self.batch_size * 3 // 2 (.8391)
             self.auc_results.append(auc)
             self.mrr_results.append(mrr)
             self.ndcg5_results.append(ndcg5)
@@ -131,7 +131,7 @@ class Trainer:
             print('Epoch %d : dev done\nDev criterions' % e)
             print('AUC = {:.4f}\nMRR = {:.4f}\nnDCG@5 = {:.4f}\nnDCG@10 = {:.4f}'.format(auc, mrr, ndcg5, ndcg10))
             if self.dev_criterion == 'auc':
-                self.scheduler.step(auc)
+                # self.scheduler.step(auc)
                 if auc >= self.best_dev_auc:
                     self.best_dev_auc = auc
                     self.best_dev_epoch = e
@@ -262,7 +262,7 @@ def distributed_train(rank, model: nn.Module, config: Config, corpus: Corpus, ru
         train_dataset.negative_sampling(rank=rank)
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True)
         train_sampler.set_epoch(e)
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=8, pin_memory=True, sampler=train_sampler)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=batch_size // 16, pin_memory=True, sampler=train_sampler)
         model.train()
         epoch_loss = 0
         for (user_ID, user_category, user_subCategory, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, \

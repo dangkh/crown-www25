@@ -9,7 +9,7 @@ from evaluate import scoring
 
 def compute_scores(model: nn.Module, corpus: Corpus, batch_size: int, mode: str, result_file: str, dataset: str):
     assert mode in ['dev', 'test'], 'mode must be chosen from \'dev\' or \'test\''
-    dataloader = DataLoader(DevTest_Dataset(corpus, mode), batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True)
+    dataloader = DataLoader(DevTest_Dataset(corpus, mode), batch_size=batch_size, shuffle=False, num_workers=batch_size // 16, pin_memory=True)
     indices = (corpus.dev_indices if mode == 'dev' else corpus.test_indices)
     scores = torch.zeros([len(indices)]).cuda()
     index = 0
