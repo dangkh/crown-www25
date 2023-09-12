@@ -2,6 +2,8 @@ import math
 from config import Config
 import torch
 import torch.nn as nn
+from torch import Tensor
+from torch.nn import TransformerEncoder, TransformerEncoderLayer
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence
 from layers import MultiHeadAttention, Attention, ScaledDotProduct_CandidateAttention, CandidateAttention, GCN
@@ -41,28 +43,65 @@ class UserEncoder(nn.Module):
 class CIDER(UserEncoder):
     def __init__(self, news_encoder: NewsEncoder, config: Config):
         super(CIDER, self).__init__(news_encoder, config)
-        self.attention = Attention(self.news_embedding_dim, config.attention_dim)
-        self.multiheadAttention = MultiHeadAttention(config.head_num, self.news_embedding_dim, config.max_history_num, config.max_history_num, config.head_dim, config.head_dim)
-        self.affine = nn.Linear(config.head_num*config.head_dim, self.news_embedding_dim, bias=True)
+        self.intent_embedding_dim = config.intent_embedding_dim
+        self.multiheadAttention = MultiHeadAttention(config.head_num, self.intent_embedding_dim, config.max_history_num, config.max_history_num, config.head_dim, config.head_dim)
+        self.affine = nn.Linear(config.head_num*config.head_dim, self.intent_embedding_dim, bias=True)
+        self.attention = Attention(self.intent_embedding_dim, config.attention_dim)
 
     def initialize(self):
-        self.attention.initialize()
         self.multiheadAttention.initialize()
         nn.init.xavier_uniform_(self.affine.weight, gain=nn.init.calculate_gain('relu'))
         nn.init.zeros_(self.affine.bias)
+        self.attention.initialize()
 
     def forward(self, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_category, user_subCategory, \
                 user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, user_embedding, candidate_news_representation):
         news_num = candidate_news_representation.size(1)
         history_embedding = self.news_encoder(user_title_text, user_title_mask, user_title_entity, \
                                               user_content_text, user_content_mask, user_content_entity, \
-                                              user_category, user_subCategory, user_embedding)                       # [batch_size, max_history_num, news_embedding_dim]
-        h = self.multiheadAttention(history_embedding, history_embedding, history_embedding, user_history_mask)      # [batch_size, max_history_num, head_num * head_dim]
-        h = F.relu(F.dropout(self.affine(h), training=self.training, inplace=True), inplace=True)                    # [batch_size, max_history_num, news_embedding_dim]
-        
-        user_representation = self.attention(h).unsqueeze(dim=1).repeat(1, news_num, 1)                              # [batch_size, news_num, news_embedding_dim]
+                                              user_category, user_subCategory, user_embedding)                  # [batch_size, max_history_num, intent_embedding_dim] 400
+        h = self.multiheadAttention(history_embedding, history_embedding, history_embedding, user_history_mask) # [batch_size, max_history_num, head_num * head_dim] 300
+        h = F.relu(F.dropout(self.affine(h), training=self.training, inplace=True), inplace=True)               # [batch_size, max_history_num, intent_embedding_dim]
+        user_representation = self.attention(h).unsqueeze(dim=1).repeat(1, news_num, 1)                         # [batch_size, news_num, intent_embedding_dim]
         return user_representation
 
+# Transformer encoder ver.
+# class CIDER(UserEncoder):
+#     def __init__(self, news_encoder: NewsEncoder, config: Config):
+#         super(CIDER, self).__init__(news_encoder, config)
+#         self.intent_embedding_dim = config.intent_embedding_dim
+#         # Multi-head attention
+#         self.attention = Attention(self.news_embedding_dim, config.attention_dim)
+#         # self.multiheadAttention = MultiHeadAttention(config.head_num, config.intent_embedding_dim, config.max_history_num, config.max_history_num, config.head_dim, config.head_dim)
+#         # self.multiheadAttention = torch.nn.MultiheadAttention(self.news_embedding_dim, config.head_num, config.dropout_rate, batch_first=True)
+#         self.affine = nn.Linear(config.head_num*config.head_dim, self.news_embedding_dim, bias=True)
+        
+#         # Transformer(MAB)
+#         self.user_pos_encoder = PositionalEncoding(self.intent_embedding_dim, config.dropout_rate, config.max_history_num)
+#         user_encoder_layers = TransformerEncoderLayer(self.intent_embedding_dim, config.MAB_head_num, config.feedforward_dim, config.dropout_rate, batch_first=True)   # head_num은 intent_embedding_dim을 나눌 수 있어야 함
+#         self.user_transformer = TransformerEncoder(user_encoder_layers, num_layers = 1)
+
+#     def initialize(self):
+#         self.attention.initialize()
+#         # self.multiheadAttention.initialize()
+#         nn.init.xavier_uniform_(self.affine.weight, gain=nn.init.calculate_gain('relu'))
+#         nn.init.zeros_(self.affine.bias)
+
+#     def forward(self, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_category, user_subCategory, \
+#                 user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, user_embedding, candidate_news_representation):
+#         news_num = candidate_news_representation.size(1)
+#         history_embedding = self.news_encoder(user_title_text, user_title_mask, user_title_entity, \
+#                                               user_content_text, user_content_mask, user_content_entity, \
+#                                               user_category, user_subCategory, user_embedding)                       # [batch_size, max_history_num, intent_embedding_dim]
+#         user_p = self.user_pos_encoder(history_embedding)                                                     # [batch_size, max_history_num, intent_embedding_dim]
+#         user_t = self.user_transformer(user_p)                                                                # [batch_size, max_history_num, intent_embedding_dim]
+#         user_representation = user_t.mean(dim=1).unsqueeze(dim=1).expand(-1, news_num, -1)                    # [batch_size, intent_embedding_dim] -> [batch_size, news_num, intent_embedding_dim]
+        
+#         # h = self.multiheadAttention(history_embedding, history_embedding, history_embedding, user_history_mask)      # [batch_size, max_history_num(news_num), news_embedding_dim]
+#         # h, _ = self.multiheadAttention(history_embedding, history_embedding, history_embedding)
+#         # h = F.relu(F.dropout(self.affine(h), training=self.training, inplace=True), inplace=True)                    # [batch_size, max_history_num, news_embedding_dim]
+#         # user_representation = self.attention(h).unsqueeze(dim=1).repeat(1, news_num, 1)                              # [batch_size(배치 당 유저의 수), news_num, news_embedding_dim]
+#         return user_representation
 
 # Structural User Encoding(SUE)
 class SUE(UserEncoder):
@@ -405,3 +444,28 @@ class OMAP(UserEncoder):
             Omega = torch.norm(torch.mm(self.W.transpose(1, 0), self.W) * (self.J_k - self.I_k), p='fro')
             self.auxiliary_loss = self.HiFi_Ark_regularizer_coefficient * Omega
         return user_representation
+
+
+class PositionalEncoding(nn.Module):
+    
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, d_model)
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Args:
+            x: Tensor, shape [batch_size, seq_len, embedding_dim]
+        """
+        x = x + self.pe[:, : x.size(1), :]
+        return self.dropout(x)

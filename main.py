@@ -69,7 +69,7 @@ def test(config: Config, corpus: Corpus):
             result_f.write('#' + str(config.run_index) + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
     elif config.mode == 'test':
         with open(config.test_output_file, 'w', encoding='utf-8') as f:
-            f.write('#18' + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
+            f.write('#31' + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
 
 # main.py
 # function: 뉴스 추천 모델을 학습, 검증, 테스트
@@ -81,6 +81,6 @@ if __name__ == '__main__':
         config.test_model_path = config.best_model_dir + '/#' + str(config.run_index) + '/' + config.news_encoder + '-' + config.user_encoder
         test(config, data_corpus)
     elif config.mode == 'test':
-        config.test_model_path = 'best_model/adressa2/CIDER-CIDER/#18/CIDER-CIDER'
-        config.test_output_file = 'results/adressa2/CIDER-CIDER/#18-test'
+        config.test_model_path = 'best_model/adressa2/CIDER-CIDER/#31/CIDER-CIDER'
+        config.test_output_file = 'results/adressa2/CIDER-CIDER/#31-test(re)'
         test(config, data_corpus)

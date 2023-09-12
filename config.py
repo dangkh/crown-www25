@@ -47,12 +47,13 @@ class Config:
         parser.add_argument('--cnn_kernel_num', type=int, default=400, help='Number of CNN kernel')
         parser.add_argument('--cnn_window_size', type=int, default=3, help='Window size of CNN kernel')
         parser.add_argument('--attention_dim', type=int, default=200, help="Attention dimension")
-        parser.add_argument('--feedforward_dim', type=int, default=512, choices=[64, 128, 512, 1024], help="The dimension of the feedforward network model")
+        parser.add_argument('--feedforward_dim', type=int, default=512, choices=[128, 256, 512, 1024, 2048], help="The dimension of the feedforward network model")
         parser.add_argument('--num_layers', type=int, default=1, help="The number of sub-encoder-layers in transformer encoder")
-        parser.add_argument('--head_num', type=int, default=10, help='Head number of multi-head self-attention')    #20  #4    #8   #16  #40
-        parser.add_argument('--head_dim', type=int, default=40, help='Head dimension of multi-head self-attention') #20  #100  #50  #25  #10
-        parser.add_argument('--intent_embedding_dim', type=int, default=400, help='K-intent embedding dimension')
-        parser.add_argument('--intent_num', type=int, default=3, help='Number of title/body intent(k)')
+        parser.add_argument('--head_num', type=int, default=10, help='Head number of multi-head self-attention(required: word_embedding_dim // head_num == 0)')
+        parser.add_argument('--head_dim', type=int, default=20, help='Head dimension of multi-head self-attention')
+        parser.add_argument('--MAB_head_num', type=int, default=10, help='Head number of transformer-encoder(required: intent_embedding_dim // MAB_head_num == 0)')
+        parser.add_argument('--intent_embedding_dim', type=int, default=200, choices=[50, 100, 200, 300, 400, 500], help='K-intent embedding dimension')
+        parser.add_argument('--intent_num', type=int, default=3, choices=[1, 2, 3, 4, 5], help='Number of title/body intent(k)')
         parser.add_argument('--user_embedding_dim', type=int, default=50, help='User embedding dimension')
         parser.add_argument('--category_embedding_dim', type=int, default=50, help='Category embedding dimension')
         parser.add_argument('--subCategory_embedding_dim', type=int, default=50, help='SubCategory embedding dimension')

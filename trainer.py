@@ -123,7 +123,7 @@ class Trainer:
             print('loss =', epoch_loss / len(self.train_dataset))
             
             # validation
-            auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size * 2, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset) # self.batch_size * 3 // 2 (.8391)
+            auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size * 3 // 2, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset) # self.batch_size * 3 // 2 (.8391)
             self.auc_results.append(auc)
             self.mrr_results.append(mrr)
             self.ndcg5_results.append(ndcg5)
