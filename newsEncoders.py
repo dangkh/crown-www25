@@ -1,15 +1,18 @@
 import pickle
 import math
+import numpy as np
+from torchtext.data.utils import get_tokenizer
+from torchtext.vocab import build_vocab_from_iterator
 from config import Config
-import torch
+import torch, sys
 import torch.nn as nn
 from torch import Tensor
 import torch.nn.functional as F
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
+from isab_pytorch import ISAB
 from torch.nn.utils.rnn import pack_padded_sequence
 from torch.nn.utils.rnn import pad_packed_sequence
 from layers import Conv1D, Conv2D_Pool, MultiHeadAttention, Attention, ScaledDotProduct_CandidateAttention, CandidateAttention
-
 
 class NewsEncoder(nn.Module):
     def __init__(self, config: Config):
@@ -70,22 +73,32 @@ class CIDER(NewsEncoder):
         # self.news_embedding_dim = config.head_num * config.head_dim         # for MH-Attention (400)
         self.news_embedding_dim = config.word_embedding_dim                   # for Transformer (300)
         
-        ### Transformer encoder
-        self.title_pos_encoder = PositionalEncoding(config.word_embedding_dim, config.dropout_rate, config.max_title_length)
-        self.body_pos_encoder = PositionalEncoding(config.word_embedding_dim, config.dropout_rate, config.max_abstract_length)
-        # Title
-        title_encoder_layers = TransformerEncoderLayer(config.word_embedding_dim, config.head_num, config.feedforward_dim, config.dropout_rate, batch_first=True)   # head_num은 word_embedding_dim을 나눌 수 있어야 함
-        self.title_transformer = TransformerEncoder(title_encoder_layers, config.num_layers)
-        # Body
-        body_encoder_layers = TransformerEncoderLayer(config.word_embedding_dim, config.head_num, config.feedforward_dim, config.dropout_rate, batch_first=True)
-        self.body_transformer = TransformerEncoder(body_encoder_layers, config.num_layers)
-
+        # Transformer encoder
+        # self.title_pos_encoder = PositionalEncoding(config.word_embedding_dim, config.dropout_rate, config.max_title_length)
+        # self.body_pos_encoder = PositionalEncoding(config.word_embedding_dim, config.dropout_rate, config.max_abstract_length)
+        # # Title
+        # title_encoder_layers = TransformerEncoderLayer(config.word_embedding_dim, config.head_num, config.feedforward_dim, config.dropout_rate, batch_first=True)   # head_num은 word_embedding_dim을 나눌 수 있어야 함
+        # self.title_transformer = TransformerEncoder(title_encoder_layers, config.num_layers)
+        # # Body
+        # body_encoder_layers = TransformerEncoderLayer(config.word_embedding_dim, config.head_num, config.feedforward_dim, config.dropout_rate, batch_first=True)
+        # self.body_transformer = TransformerEncoder(body_encoder_layers, config.num_layers)
+        
+        # ISAB(Induced Set Attention Block) emcoder - 230915
+        self.ISAB = ISAB(dim_in = config.word_embedding_dim, 
+                         dim_out = config.word_embedding_dim, 
+                         num_heads = 4,                       # 2, 4, 8
+                         num_inds = config.num_inds,          # 4, The number of body inducing points
+                         ln = True)
+        
+                # # Knowledge encoder
+                # knowledge_indices = KnowledgePreparing()
+                # self.knowledge_encoder = KnowledgeEncoding(config.vocabulary_size, config.word_embedding_dim, knowledge_indices, alpha, config.dropout_rate)
+        
         # self.title_multiheadAttention = MultiHeadAttention(config.head_num, config.word_embedding_dim, config.max_title_length, config.max_title_length, config.head_dim, config.head_dim)          # for MH-Attention
         # self.body_multiheadAttention = MultiHeadAttention(config.head_num, config.word_embedding_dim, config.max_abstract_length, config.max_abstract_length, config.head_dim, config.head_dim)     # for MH-Attention
         # self.title_multiheadAttention = torch.nn.MultiheadAttention(config.word_embedding_dim, config.head_num, dropout=0.2, batch_first=True)  # [batch_size * news_num(배치 당 뉴스의 수), max_title_length, news_embedding_dim]
         # self.body_multiheadAttention = torch.nn.MultiheadAttention(config.word_embedding_dim, config.head_num, dropout=0.2, batch_first=True)
         
-        # average applying (왜 하는지 알고 해라. - yyko)
         self.title_attention = Attention(config.word_embedding_dim, config.attention_dim) 
         self.body_attention = Attention(config.word_embedding_dim, config.attention_dim)
         
@@ -126,8 +139,8 @@ class CIDER(NewsEncoder):
         # 하나로 합치는데, category + sub_cate concat해서 linear 100->50
         category_representation = self.category_affine(torch.cat([self.category_embedding(category), 
                                                                   self.subCategory_embedding(subCategory)], dim=2))  # [batch_size, news_num, category+subCategory_embedding_dim]                
-        # category_aware_embedding = torch.cat([news_embedding, self.dropout(category_representation)], dim=2)         # [batch_size, news_num, news_embedding_dim = title/body + category] 300+50 = 350
-        category_aware_embedding = torch.cat([news_embedding, category_representation], dim=2)
+        category_aware_embedding = torch.cat([news_embedding, self.dropout(category_representation)], dim=2)         # [batch_size, news_num, news_embedding_dim = title/body + category] 300+50 = 350
+        # category_aware_embedding = torch.cat([news_embedding, category_representation], dim=2)
         return category_aware_embedding
     
     # Input: [batch_size, news_num, news_embedding_dim]
@@ -137,12 +150,11 @@ class CIDER(NewsEncoder):
         k_intent_embeddings = []
         for i in range(intent_num):
             # Apply different linear transformations for each intent
-            intent_embedding = F.relu(self.intent_layers[i](news_embedding), inplace=True)         
+            intent_embedding = F.relu(self.intent_layers[i](news_embedding), inplace=True)      
             k_intent_embeddings.append(intent_embedding)
         
         return k_intent_embeddings                                                              
-    # 현재는 single -> 이후 tuning 형태로 multi (각 어떻게 생겼는지 말할 수 있어야 함)
-    # intent_distribution도 같이
+    
     def intent_attention(self, intent_num, k_intent_embeddings):
         k_intent_embeddings = k_intent_embeddings[:intent_num]
         feature = torch.stack(k_intent_embeddings, dim=2)                                                   # [batch_size, news_num, k, intent_embedding_dim]
@@ -180,39 +192,50 @@ class CIDER(NewsEncoder):
         title_w = self.dropout(self.word_embedding(title_text)).view([batch_news_num, self.max_title_length, self.word_embedding_dim])          # [batch_size * news_num, max_title_length, word_embedding_dim]
         body_w = self.dropout(self.word_embedding(content_text)).view([batch_news_num, self.max_body_length, self.word_embedding_dim])          # [batch_size * news_num, max_content_length, word_embedding_dim]
         
-        # (2) CNN encoding
-        # to learn contextual word representations by capturing the local context information
-        # title_c = self.dropout_(self.title_conv(title_w.permute(0, 2, 1)).permute(0, 2, 1))         # [batch_size * news_num, max_title_length, cnn_kernel_num]
-        # body_c = self.dropout_(self.body_conv(body_w.permute(0, 2, 1)).permute(0, 2, 1))            # [batch_size * news_num, max_content_length, cnn_kernel_num]
-        
         # (2) Multi-head Attention(MA) encoding
         # to learn contextual representations of words by capturing their interactions
         # (such long-distance interactions usually can not be captured by CNN)
         # title_m, _ = self.title_multiheadAttention(title_w, title_w, title_w)                  # [batch_size * news_num, max_title_length, news_embedding_dim]
         # body_m, _ = self.body_multiheadAttention(body_w, body_w, body_w)                       # [batch_size * news_num, max_content_length, news_embedding_dim]
         
-        # (2) Transformer encoding (like KHAN) (adopt)
-        title_p = self.title_pos_encoder(title_w)                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
-        title_t = self.title_transformer(title_p)                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
-        title_embedding = title_t.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])     # [batch_size, news_num, news_embedding_dim] 300
-        body_p = self.body_pos_encoder(body_w)                                                          # [batch_size * news_num, max_title_length, news_embedding_dim]
-        body_t = self.body_transformer(body_p)                                                          # [batch_size * news_num, max_title_length, news_embedding_dim]
-        body_embedding = body_t.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])       # [batch_size, news_num, news_embedding_dim] 300
+                # ## Knowledge encoding
+                # residual = title_w
+                # title_k = self.knowledge_encoder(title_w, title_text)                                   # [batch_size * news_num, max_title_length, word_embedding_dim]
+                # title_k += residual                                                                     # [batch_size * news_num, max_title_length, word_embedding_dim]
+        
+        # (2) Transformer encoding
+        # title_p = self.title_pos_encoder(title_w)                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
+        # title_t = self.title_transformer(title_p)                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
+        # title_embedding = title_t.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])     # [batch_size, news_num, news_embedding_dim] 300              for Transformer(average)
+        
+        # body_p = self.body_pos_encoder(body_w)                                                          # [batch_size * news_num, max_content_length, news_embedding_dim]
+        # body_t = self.body_transformer(body_p)                                                          # [batch_size * news_num, max_content_length, news_embedding_dim]
+        # body_embedding = body_t.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])       # [batch_size, news_num, news_embedding_dim] 300              for Transformer(average)
+        
+        
+        # (2) ISAB(Induced Set Attention Block) encoding - 230915
+        title_isab1 = self.dropout(self.ISAB(title_w))                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
+        title_isab2 = self.dropout(self.ISAB(title_isab1))                                                   # [batch_size * news_num, max_title_length, news_embedding_dim]
+        
+        title_embedding = title_isab2.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])      # [batch_size, news_num, news_embedding_dim]
+        
+        body_isab1 = self.dropout(self.ISAB(body_w))                                                         # [batch_size * news_num, max_title_length, news_embedding_dim]
+        body_isab2 = self.dropout(self.ISAB(body_isab1))                                                     # [batch_size * news_num, max_title_length, news_embedding_dim]
+        
+        body_embedding = body_isab2.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])        # [batch_size, news_num, news_embedding_dim]
+        
         
         # (3) Word-level Attention encoding (* instead of title_t.mean(dim=1))
-        # to select important words in news titles to learn more informative news representations
-        # title_representation = self.title_attention(title_c).view([batch_size, news_num, self.cnn_kernel_num])                              # [batch_size, news_num, cnn_kernel_num]          for CNN encoding
-        # body_representation = self.body_attention(body_c).view([batch_size, news_num, self.cnn_kernel_num])                                 # [batch_size, news_num, cnn_kernel_num]          for CNN encoding
+        # to select important words in news titles to learn more informative news representations        
         
         # title_embedding = self.title_attention(title_m, mask=t_mask).view([batch_size, news_num, self.news_embedding_dim])                  # [batch_size, news_num, news_embedding_dim]      for MH-Attention
         # body_embedding = self.body_attention(body_m, mask=b_mask).view([batch_size, news_num, self.news_embedding_dim])                     # [batch_size, news_num, news_embedding_dim]      for MH-Attention
         
-        # title_embedding = self.title_attention(title_t, mask=t_mask).view([batch_size, news_num, self.news_embedding_dim])                  # [batch_size, news_num, news_embedding_dim]      for Transformer
-        # body_embedding = self.body_attention(body_t, mask=b_mask).view([batch_size, news_num, self.news_embedding_dim])                     # [batch_size, news_num, news_embedding_dim]      for Transformer       
+        # title_embedding = self.title_attention(title_t, mask=t_mask).view([batch_size, news_num, self.news_embedding_dim])                  # [batch_size, news_num, news_embedding_dim]      for Transformer(attention)
+        # body_embedding = self.body_attention(body_t, mask=b_mask).view([batch_size, news_num, self.news_embedding_dim])                     # [batch_size, news_num, news_embedding_dim]      for Transformer(attention)
         
         
         # (4) Category-aware intent disentanglement
-        ### set transformer, Multi-head Attention Block(MAB)(self-attention 2번) 수식 고려해서 적용해보기 instead of naive MA encoding
         ###
         ### 1. input: Category embedding, Title(Body) embedding -> concat 
         ### -> output: Category-Title(Body) embedding
@@ -244,10 +267,50 @@ class CIDER(NewsEncoder):
         ### -> output: news representation embedding
         # (해석의 차이)
         # news_representation = torch.cat([title_intent_embedding, title_body_similarity * body_intent_embedding], dim=2)      # [batch_size, news_num, title+body intent_embedding_dim]        
-        news_representation = title_intent_embedding + title_body_similarity * body_intent_embedding
+        news_representation = title_intent_embedding + title_body_similarity * body_intent_embedding                         # [batch_size, news_num, title(body) intent_embedding_dim]    
         
         return news_representation
 
+class MAB(nn.Module):
+    def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
+        super(MAB, self).__init__()
+        self.dim_V = dim_V
+        self.num_heads = num_heads
+        self.fc_q = nn.Linear(dim_Q, dim_V)
+        self.fc_k = nn.Linear(dim_K, dim_V)
+        self.fc_v = nn.Linear(dim_K, dim_V)
+        if ln:
+            self.ln0 = nn.LayerNorm(dim_V)
+            self.ln1 = nn.LayerNorm(dim_V)
+        self.fc_o = nn.Linear(dim_V, dim_V)
+
+    def forward(self, Q, K):
+        Q = self.fc_q(Q)
+        K, V = self.fc_k(K), self.fc_v(K)
+
+        dim_split = self.dim_V // self.num_heads
+        Q_ = torch.cat(Q.split(dim_split, 2), 0)
+        K_ = torch.cat(K.split(dim_split, 2), 0)
+        V_ = torch.cat(V.split(dim_split, 2), 0)
+
+        A = torch.softmax(Q_.bmm(K_.transpose(1,2))/math.sqrt(self.dim_V), 2)
+        O = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
+        O = O if getattr(self, 'ln0', None) is None else self.ln0(O)
+        O = O + F.relu(self.fc_o(O))
+        O = O if getattr(self, 'ln1', None) is None else self.ln1(O)
+        return O
+
+class ISAB(nn.Module):
+    def __init__(self, dim_in, dim_out, num_heads, num_inds, ln=False):
+        super(ISAB, self).__init__()
+        self.I = nn.Parameter(torch.Tensor(1, num_inds, dim_out))
+        nn.init.xavier_uniform_(self.I)
+        self.mab0 = MAB(dim_out, dim_in, dim_out, num_heads, ln=ln)
+        self.mab1 = MAB(dim_in, dim_out, dim_out, num_heads, ln=ln)
+
+    def forward(self, X):
+        H = self.mab0(self.I.repeat(X.size(0), 1, 1), X)
+        return self.mab1(X, H)
 
 
 # Collaborative News Encoding(CNE)
@@ -664,3 +727,77 @@ class PositionalEncoding(nn.Module):
         """
         x = x + self.pe[:, : x.size(1), :]
         return self.dropout(x)
+
+
+# class KnowledgePreparing(nn.Module):
+#     def __init__(self, vocab_size: int, embed_size: int, knowledge_indices, alpha: float, beta: float, dropout: float = 0.3):
+#         super().__init__()
+        
+#         common_entity_list = []
+#         with open('./pre-trained/entities_yago.dict') as common_file:
+#             while (line := common_file.readline().rstrip()):
+#                 common_entity_list.append(line.split()[1].split('_')[0].lower())
+        
+#         def yield_tokens(data_iter, tokenizer):
+#             for _, title, text in data_iter:
+#                 yield tokenizer(title)
+#                 yield tokenizer(str(text))
+        
+#         # build vocab
+#         tokenizer = get_tokenizer('basic_english')
+#         vocab = build_vocab_from_iterator(yield_tokens(train_iter, tokenizer), specials=['<unk>', '<sep>'])
+#         vocab.set_default_index(vocab['<unk>'])
+        
+#         common_lookup_indices = vocab.lookup_indices(common_entity_list)
+#         knowledge_indices['common'] = common_lookup_indices
+
+# class KnowledgeEncoding(nn.Module):
+    
+#     def __init__(self, vocab_size: int, embed_size: int, knowledge_indices, alpha: float, dropout: float = 0.3):
+#         super().__init__()
+
+#         self.alpha = alpha
+
+#         common_knowledge_path = './pre-trained/YAGO.RotatE.'
+
+#         if embed_size == 128:  
+#             common_knowledge_path += '128/entity_embedding.npy'
+#         elif embed_size == 256:
+#             common_knowledge_path += '256/entity_embedding.npy'
+#         elif embed_size == 512:
+#             common_knowledge_path += '512/entity_embedding.npy'
+#         elif embed_size == 1024:
+#             common_knowledge_path += '1024/entity_embedding.npy'
+#         else:
+#             print ('Wrong embedding dimension! Dimension should be 128, 256, 512, or 1024')
+#             sys.exit(1)
+
+#         common_pre_trained = np.load(common_knowledge_path)
+#         common_knowledge = []
+#         print('  - Reading Pre-trained Knowledge Embeddings...')
+#         for idx in range(vocab_size):
+#             mapping = 0
+#             for j, vocab_idx in enumerate(knowledge_indices['common']):
+#                 if idx != 0 and idx == vocab_idx:
+#                     common_knowledge.append(common_pre_trained[j])
+#                     mapping = 1
+#                     break
+#             if mapping == 0:
+#                 common_knowledge.append(np.zeros(embed_size))
+#             mapping = 0
+
+#         self.common_knowledge = nn.Embedding.from_pretrained(torch.FloatTensor(common_knowledge))
+
+#         self.fuse_knowledge_fc = nn.Linear(embed_size*2, embed_size)
+#         self.dropout = nn.Dropout(p=dropout)
+#         self.init_weights()
+
+#     def init_weights(self) -> None:
+#         initrange = 0.5
+#         self.fuse_knowledge_fc.weight.data.uniform_(-initrange, initrange)
+#         self.fuse_knowledge_fc.bias.data.zero_()
+
+#     def forward(self, word_embeddings: Tensor, texts: Tensor) -> Tensor:
+
+#         emb_with_ckwldg = (word_embeddings * self.alpha) + (self.common_knowledge(texts) * (1-self.alpha))
+#         return self.dropout(emb_with_ckwldg)
