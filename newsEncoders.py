@@ -1,15 +1,15 @@
 import pickle
 import math
-import numpy as np
-from torchtext.data.utils import get_tokenizer
-from torchtext.vocab import build_vocab_from_iterator
+# import numpy as np
+# from torchtext.data.utils import get_tokenizer
+# from torchtext.vocab import build_vocab_from_iterator
+# import sys
 from config import Config
-import torch, sys
+import torch
 import torch.nn as nn
 from torch import Tensor
 import torch.nn.functional as F
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
-from isab_pytorch import ISAB
+# from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from torch.nn.utils.rnn import pack_padded_sequence
 from torch.nn.utils.rnn import pad_packed_sequence
 from layers import Conv1D, Conv2D_Pool, MultiHeadAttention, Attention, ScaledDotProduct_CandidateAttention, CandidateAttention
@@ -76,18 +76,21 @@ class CIDER(NewsEncoder):
         # Transformer encoder
         # self.title_pos_encoder = PositionalEncoding(config.word_embedding_dim, config.dropout_rate, config.max_title_length)
         # self.body_pos_encoder = PositionalEncoding(config.word_embedding_dim, config.dropout_rate, config.max_abstract_length)
-        # # Title
-        # title_encoder_layers = TransformerEncoderLayer(config.word_embedding_dim, config.head_num, config.feedforward_dim, config.dropout_rate, batch_first=True)   # head_num은 word_embedding_dim을 나눌 수 있어야 함
-        # self.title_transformer = TransformerEncoder(title_encoder_layers, config.num_layers)
-        # # Body
-        # body_encoder_layers = TransformerEncoderLayer(config.word_embedding_dim, config.head_num, config.feedforward_dim, config.dropout_rate, batch_first=True)
-        # self.body_transformer = TransformerEncoder(body_encoder_layers, config.num_layers)
+        # encoder_layers = TransformerEncoderLayer(config.word_embedding_dim, config.head_num, config.feedforward_dim, config.dropout_rate, batch_first=True)   # head_num은 word_embedding_dim을 나눌 수 있어야 함
+        # self.transformer = TransformerEncoder(encoder_layers, config.num_layers)
+        
+        # MAB(Multihead Attention Block) encoder
+        self.MAB = MAB(config.word_embedding_dim, 
+                       config.word_embedding_dim, 
+                       config.word_embedding_dim, 
+                       num_heads = config.isab_num_heads, 
+                       ln = True)
         
         # ISAB(Induced Set Attention Block) emcoder - 230915
         self.ISAB = ISAB(dim_in = config.word_embedding_dim, 
-                         dim_out = config.word_embedding_dim, 
-                         num_heads = 4,                       # 2, 4, 8
-                         num_inds = config.num_inds,          # 4, The number of body inducing points
+                         dim_out = config.word_embedding_dim,
+                         num_heads = config.isab_num_heads,        # The number of ISAB heads       4,  choices=[2, 4, 8]
+                         num_inds = config.isab_num_inds,          # The number of inducing points  4,  choices=[2, 4, 6, 8]
                          ln = True)
         
                 # # Knowledge encoder
@@ -96,19 +99,18 @@ class CIDER(NewsEncoder):
         
         # self.title_multiheadAttention = MultiHeadAttention(config.head_num, config.word_embedding_dim, config.max_title_length, config.max_title_length, config.head_dim, config.head_dim)          # for MH-Attention
         # self.body_multiheadAttention = MultiHeadAttention(config.head_num, config.word_embedding_dim, config.max_abstract_length, config.max_abstract_length, config.head_dim, config.head_dim)     # for MH-Attention
-        # self.title_multiheadAttention = torch.nn.MultiheadAttention(config.word_embedding_dim, config.head_num, dropout=0.2, batch_first=True)  # [batch_size * news_num(배치 당 뉴스의 수), max_title_length, news_embedding_dim]
+        # self.title_multiheadAttention = torch.nn.MultiheadAttention(config.word_embedding_dim, config.head_num, dropout=0.2, batch_first=True)
         # self.body_multiheadAttention = torch.nn.MultiheadAttention(config.word_embedding_dim, config.head_num, dropout=0.2, batch_first=True)
         
         self.title_attention = Attention(config.word_embedding_dim, config.attention_dim) 
         self.body_attention = Attention(config.word_embedding_dim, config.attention_dim)
         
-        # self.category_affine = nn.Linear(config.category_embedding_dim, config.cnn_kernel_num, bias=True)                     # for CNN encoding
         self.category_affine = nn.Linear(config.category_embedding_dim + config.subCategory_embedding_dim, config.category_embedding_dim)               
-        # self.affine1 = nn.Linear(config.cnn_kernel_num, config.attention_dim, bias=True)                                      # for CNN encoding
+        
         self.affine1 = nn.Linear(config.intent_embedding_dim, config.attention_dim, bias=True)               # for intent attention (linear transformation)
         self.affine2 = nn.Linear(config.attention_dim, 1, bias=False)                                        # for intent attention (distribution score)
         
-        self.intent_num = config.intent_num     # hyper-parameter k
+        self.intent_num = config.intent_num     # hyperparameter k
         self.intent_layers = nn.ModuleList([nn.Linear(config.word_embedding_dim
                                                       + config.category_embedding_dim
                                                       , config.intent_embedding_dim, bias=True) 
@@ -133,7 +135,7 @@ class CIDER(NewsEncoder):
     # category            : [batch_size, news_num]
     # subCategory         : [batch_size, news_num]
     # Output
-    # category-aware_title/body_embedding : [batch_size, news_num, title/body_embedding_dim + (cat_dim + subcat_dim)//2]
+    # category-aware_title/body_embedding : [batch_size, news_num, title/body_embedding_dim + (category_dim + subCategory_dim) // 2]
     
     def category_aware_represent(self, news_embedding, category, subCategory):        
         # 하나로 합치는데, category + sub_cate concat해서 linear 100->50
@@ -205,24 +207,35 @@ class CIDER(NewsEncoder):
         
         # (2) Transformer encoding
         # title_p = self.title_pos_encoder(title_w)                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
-        # title_t = self.title_transformer(title_p)                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
+        # title_t = self.transformer(title_p)                                                             # [batch_size * news_num, max_title_length, news_embedding_dim]
         # title_embedding = title_t.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])     # [batch_size, news_num, news_embedding_dim] 300              for Transformer(average)
         
         # body_p = self.body_pos_encoder(body_w)                                                          # [batch_size * news_num, max_content_length, news_embedding_dim]
-        # body_t = self.body_transformer(body_p)                                                          # [batch_size * news_num, max_content_length, news_embedding_dim]
+        # body_t = self.transformer(body_p)                                                               # [batch_size * news_num, max_content_length, news_embedding_dim]
         # body_embedding = body_t.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])       # [batch_size, news_num, news_embedding_dim] 300              for Transformer(average)
         
+        # (2) MAB(Multihead Attention Block) encoding
+        title_mab1 = self.dropout(self.MAB(title_w, title_w))                                                # [batch_size * news_num, max_title_length, news_embedding_dim]
+        title_mab2 = self.dropout(self.MAB(title_mab1, title_mab1))                                          # [batch_size * news_num, max_title_length, news_embedding_dim]
+        
+        title_embedding = title_mab2.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])       # [batch_size, news_num, news_embedding_dim]
+        
+        body_mab1 = self.dropout(self.MAB(body_w, body_w))                                                   # [batch_size * news_num, max_title_length, news_embedding_dim]
+        body_mab2 = self.dropout(self.MAB(body_mab1, body_mab1))                                             # [batch_size * news_num, max_title_length, news_embedding_dim]
+        
+        body_embedding = body_mab2.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])         # [batch_size, news_num, news_embedding_dim]
+                
         
         # (2) ISAB(Induced Set Attention Block) encoding - 230915
-        title_isab1 = self.dropout(self.ISAB(title_w))                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
-        title_isab2 = self.dropout(self.ISAB(title_isab1))                                                   # [batch_size * news_num, max_title_length, news_embedding_dim]
-        
-        title_embedding = title_isab2.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])      # [batch_size, news_num, news_embedding_dim]
-        
-        body_isab1 = self.dropout(self.ISAB(body_w))                                                         # [batch_size * news_num, max_title_length, news_embedding_dim]
-        body_isab2 = self.dropout(self.ISAB(body_isab1))                                                     # [batch_size * news_num, max_title_length, news_embedding_dim]
-        
-        body_embedding = body_isab2.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])        # [batch_size, news_num, news_embedding_dim]
+        # title_isab1 = self.dropout(self.ISAB(title_w))                                                       # [batch_size * news_num, max_title_length, news_embedding_dim]
+        # title_isab2 = self.dropout(self.ISAB(title_isab1))                                                   # [batch_size * news_num, max_title_length, news_embedding_dim]
+
+        # title_embedding = title_isab2.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])      # [batch_size, news_num, news_embedding_dim]
+
+        # body_isab1 = self.dropout(self.ISAB(body_w))                                                         # [batch_size * news_num, max_title_length, news_embedding_dim]
+        # body_isab2 = self.dropout(self.ISAB(body_isab1))                                                     # [batch_size * news_num, max_title_length, news_embedding_dim]
+
+        # body_embedding = body_isab2.mean(dim=1).view([batch_size, news_num, self.news_embedding_dim])        # [batch_size, news_num, news_embedding_dim]
         
         
         # (3) Word-level Attention encoding (* instead of title_t.mean(dim=1))
@@ -265,9 +278,8 @@ class CIDER(NewsEncoder):
         
         ### 5. input: Title embedding, Body embedding -> average (weighted sum)
         ### -> output: news representation embedding
-        # (해석의 차이)
-        # news_representation = torch.cat([title_intent_embedding, title_body_similarity * body_intent_embedding], dim=2)      # [batch_size, news_num, title+body intent_embedding_dim]        
-        news_representation = title_intent_embedding + title_body_similarity * body_intent_embedding                         # [batch_size, news_num, title(body) intent_embedding_dim]    
+        # news_representation = torch.cat([title_intent_embedding, title_body_similarity * body_intent_embedding], dim=2)      # [batch_size, news_num, title+body intent_embedding_dim]     # concat 
+        news_representation = title_intent_embedding + title_body_similarity * body_intent_embedding                         # [batch_size, news_num, title(body) intent_embedding_dim]     # average
         
         return news_representation
 
@@ -509,43 +521,6 @@ class KCNN(NewsEncoder):
         return news_representation
 
 
-class HDC(NewsEncoder):
-    def __init__(self, config: Config):
-        super(HDC, self).__init__(config)
-        self.category_embedding = nn.Embedding(num_embeddings=config.category_num, embedding_dim=config.word_embedding_dim)
-        self.subCategory_embedding = nn.Embedding(num_embeddings=config.subCategory_num, embedding_dim=config.word_embedding_dim)
-        self.HDC_sequence_length = config.max_title_length + 2
-        self.HDC_filter_num = config.HDC_filter_num
-        self.dilated_conv1 = nn.Conv1d(in_channels=config.word_embedding_dim, out_channels=self.HDC_filter_num, kernel_size=config.HDC_window_size, padding=(config.HDC_window_size - 1) // 2, dilation=1)
-        self.dilated_conv2 = nn.Conv1d(in_channels=self.HDC_filter_num, out_channels=self.HDC_filter_num, kernel_size=config.HDC_window_size, padding=(config.HDC_window_size - 1) // 2 + 1, dilation=2)
-        self.dilated_conv3 = nn.Conv1d(in_channels=self.HDC_filter_num, out_channels=self.HDC_filter_num, kernel_size=config.HDC_window_size, padding=(config.HDC_window_size - 1) // 2 + 2, dilation=3)
-        self.layer_norm1 = nn.LayerNorm([self.HDC_filter_num, self.HDC_sequence_length])
-        self.layer_norm2 = nn.LayerNorm([self.HDC_filter_num, self.HDC_sequence_length])
-        self.layer_norm3 = nn.LayerNorm([self.HDC_filter_num, self.HDC_sequence_length])
-        self.news_embedding_dim = None
-
-    def initialize(self):
-        super().initialize()
-
-    def forward(self, title_text, title_mask, title_entity, content_text, content_mask, content_entity, category, subCategory, user_embedding):
-        batch_size = title_text.size(0)
-        news_num = title_text.size(1)
-        batch_news_num = batch_size * news_num
-        # 1. sequence embeddings
-        word_embedding = self.word_embedding(title_text).permute(0, 1, 3, 2)                                                 # [batch_size, news_num, word_embedding_dim, title_length]
-        category_embedding = self.category_embedding(category).unsqueeze(dim=3)                                              # [batch_size, news_num, word_embedding_dim, 1]
-        subCategory_embedding = self.subCategory_embedding(subCategory).unsqueeze(dim=3)                                     # [batch_size, news_num, word_embedding_dim, 1]
-        d0 = torch.cat([category_embedding, subCategory_embedding, word_embedding], dim=3)                                   # [batch_size, news_num, word_embedding_dim, HDC_sequence_length]
-        d0 = d0.view([batch_news_num, self.word_embedding_dim, self.HDC_sequence_length])                                    # [batch_size * news_num, word_embedding_dim, HDC_sequence_length]
-        # 2. hierarchical dilated convolution
-        d1 = F.relu(self.layer_norm1(self.dilated_conv1(d0)), inplace=True)                                                  # [batch_size * news_num, HDC_filter_num, HDC_sequence_length]
-        d2 = F.relu(self.layer_norm2(self.dilated_conv2(d1)), inplace=True)                                                  # [batch_size * news_num, HDC_filter_num, HDC_sequence_length]
-        d3 = F.relu(self.layer_norm3(self.dilated_conv3(d2)), inplace=True)                                                  # [batch_size * news_num, HDC_filter_num, HDC_sequence_length]
-        d0 = d0.view([batch_size, news_num, self.word_embedding_dim, self.HDC_sequence_length])                              # [batch_size, news_num, word_embedding_dim, HDC_sequence_length]
-        dL = torch.stack([d1, d2, d3], dim=1).view([batch_size, news_num, 3, self.HDC_filter_num, self.HDC_sequence_length]) # [batch_size, news_num, 3, HDC_filter_num, HDC_sequence_length]
-        return (d0, dL)
-
-
 class NAML(NewsEncoder):
     def __init__(self, config: Config):
         super(NAML, self).__init__(config)
@@ -665,44 +640,6 @@ class DAE(NewsEncoder):
         news_representation = self.feature_fusion(news_representation, category, subCategory)                         # [batch_size, news_num, news_embedding_dim]
         return news_representation
 
-
-class Inception(NewsEncoder):
-    def __init__(self, config: Config):
-        super(Inception, self).__init__(config)
-        assert config.word_embedding_dim == config.category_embedding_dim and config.word_embedding_dim == config.subCategory_embedding_dim, 'embedding dimension must be the same in the Inception module'
-        self.fc1_1 = nn.Linear(config.word_embedding_dim*4, config.hidden_dim, bias=True)
-        self.fc1_2 = nn.Linear(config.hidden_dim, config.hidden_dim, bias=True)
-        self.fc1_3 = nn.Linear(config.hidden_dim, config.word_embedding_dim, bias=True)
-        self.fc2 = nn.Linear(config.word_embedding_dim*4, config.word_embedding_dim, bias=True)
-        self.linear_transform = nn.Linear(config.word_embedding_dim*3, config.word_embedding_dim, bias=True)
-        self.news_embedding_dim = config.word_embedding_dim
-
-    def initialize(self):
-        super().initialize()
-        nn.init.xavier_uniform_(self.fc1_1.weight, gain=nn.init.calculate_gain('relu'))
-        nn.init.zeros_(self.fc1_1.bias)
-        nn.init.xavier_uniform_(self.fc1_2.weight, gain=nn.init.calculate_gain('relu'))
-        nn.init.zeros_(self.fc1_2.bias)
-        nn.init.xavier_uniform_(self.fc1_3.weight, gain=nn.init.calculate_gain('relu'))
-        nn.init.zeros_(self.fc1_3.bias)
-        nn.init.xavier_uniform_(self.fc2.weight, gain=nn.init.calculate_gain('relu'))
-        nn.init.zeros_(self.fc2.bias)
-        nn.init.xavier_uniform_(self.linear_transform.weight)
-        nn.init.zeros_(self.linear_transform.bias)
-
-    def forward(self, title_text, title_mask, title_entity, content_text, content_mask, content_entity, category, subCategory, user_embedding):
-        title_mask[:, :, 0] = 1   # To avoid zero-length title
-        content_mask[:, :, 0] = 1 # To avoid zero-length content
-        title_embedding = (self.word_embedding(title_text) * title_mask.unsqueeze(dim=3)).sum(dim=2) / title_mask.sum(dim=2, keepdim=True)         # [batch_size, news_num, word_embedding_dim]
-        content_embedding = (self.word_embedding(content_text) * content_mask.unsqueeze(dim=3)).sum(dim=2) / content_mask.sum(dim=2, keepdim=True) # [batch_size, news_num, word_embedding_dim]
-        category_embedding = self.category_embedding(category)                                                                                     # [batch_size, news_num, category_embedding_dim]
-        subCategory_embedding = self.subCategory_embedding(subCategory)                                                                            # [batch_size, news_num, subCategory_embedding_dim]
-        embeddings = torch.cat([title_embedding, content_embedding, category_embedding, subCategory_embedding], dim=2)                             # [batch_size, news_num, embedding_dim * 4]
-        subnetwork1 = F.relu(self.fc1_3(F.relu(self.fc1_2(F.relu(self.fc1_1(embeddings), inplace=True)), inplace=True)), inplace=True)             # [batch_size, news_num, embedding_dim]
-        subnetwork2 = F.relu(self.fc2(embeddings), inplace=True)                                                                                   # [batch_size, news_num, embedding_dim]
-        subnetwork3 = title_embedding + content_embedding + category_embedding + subCategory_embedding                                             # [batch_size, news_num, embedding_dim]
-        news_representation = self.linear_transform(torch.cat([subnetwork1, subnetwork2, subnetwork3], dim=2))                                     # [batch_size, news_num, embedding_dim]
-        return news_representation
 
 class PositionalEncoding(nn.Module):
     
