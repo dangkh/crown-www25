@@ -14,6 +14,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+import wandb
 
 
 class Trainer:
@@ -183,6 +184,8 @@ class Trainer:
                 else:
                     self.epoch_not_increase += 1
 
+            # wandb.log({'validation_auc': auc, 'val_precision': val_precision, 'val_accuracy': val_accuracy, 'val_recall': val_recall, 'val_weighted_f1': val_weighted_f1, 'val_micro_f1': val_micro_f1, 'val_macro_f1': val_macro_f1})
+            
             print('Best epoch :', self.best_dev_epoch)
             print('Best ' + self.dev_criterion + ' : ' + str(getattr(self, 'best_dev_' + self.dev_criterion)))
             torch.cuda.empty_cache()
@@ -190,7 +193,7 @@ class Trainer:
                 torch.save({model.model_name: model.state_dict()}, self.model_dir + '/' + model.model_name + '-' + str(self.best_dev_epoch))
             if self.epoch_not_increase == self.early_stopping_epoch:
                 break
-
+        
         with open('%s/%s-%s-dev_log.txt' % (self.dev_res_dir, model.model_name, self._dataset), 'w', encoding='utf-8') as f:
             f.write('Epoch\tAUC\tMRR\tnDCG@5\tnDCG@10\n')
             for i in range(len(self.auc_results)):

@@ -10,6 +10,15 @@ from model import Model
 from trainer import Trainer, distributed_train
 from util import compute_scores, get_run_index
 import torch.multiprocessing as mp
+import wandb
+
+# wandb.init()
+# wandb_config = wandb.config
+
+# LEARNING_RATE = wandb_config.lr                       #args.lr
+# BATCH_SIZE = wandb_config.bs                          #args.bs
+# NUM_NEIGHBORS = wandb_config.n_degree                 #args.n_degree
+# NUM_LAYER = wandb_config.n_layer                      #args.n_layer 
 
 # function: model training
 def train(config: Config, corpus: Corpus):
@@ -18,6 +27,7 @@ def train(config: Config, corpus: Corpus):
     run_index = get_run_index(config.result_dir)
     # Parallel processing, if distributed training is possible (python 3.7)
     if config.world_size == 1:
+        # wandb.watch(model, log='all') # wandb hyperparameter tuning - 230915am0412
         trainer = Trainer(model, config, corpus, run_index)
         trainer.train()
         trainer = None
@@ -69,7 +79,7 @@ def test(config: Config, corpus: Corpus):
             result_f.write('#' + str(config.run_index) + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
     elif config.mode == 'test':
         with open(config.test_output_file, 'w', encoding='utf-8') as f:
-            f.write('#31' + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
+            f.write('#45' + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
 
 # main.py
 # function: 뉴스 추천 모델을 학습, 검증, 테스트
@@ -81,6 +91,6 @@ if __name__ == '__main__':
         config.test_model_path = config.best_model_dir + '/#' + str(config.run_index) + '/' + config.news_encoder + '-' + config.user_encoder
         test(config, data_corpus)
     elif config.mode == 'test':
-        config.test_model_path = 'best_model/adressa2/CIDER-CIDER/#31/CIDER-CIDER'
-        config.test_output_file = 'results/adressa2/CIDER-CIDER/#31-test(re)'
+        config.test_model_path = 'best_model/adressa2/CIDER-CIDER/#45/CIDER-CIDER'
+        config.test_output_file = 'results/adressa2/CIDER-CIDER/#45-test(re)'
         test(config, data_corpus)
