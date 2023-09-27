@@ -217,7 +217,7 @@ class Corpus:
                     pickle.dump(entity_embedding_vectors, entity_embedding_f)
                 with open(context_embedding_file, 'wb') as context_embedding_f:
                     pickle.dump(context_embedding_vectors, context_embedding_f)
-
+            
             # 6. user history graph
             category_num = len(category_dict)
             graph_size = config.max_history_num + category_num # graph size of |V_{n}|+|V_{p}|

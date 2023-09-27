@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Conv1D(nn.Module):
-    def __init__(self, cnn_method: str, in_channels: int, cnn_kernel_num: int, cnn_window_size: int):
+    def __init__(self, cnn_method, in_channels, cnn_kernel_num, cnn_window_size):
         super(Conv1D, self).__init__()
         assert cnn_method in ['naive', 'group3', 'group5']
         self.cnn_method = cnn_method
@@ -44,7 +44,7 @@ class Conv1D(nn.Module):
 
 
 class Conv2D_Pool(nn.Module):
-    def __init__(self, cnn_method: str, in_channels: int, cnn_kernel_num: int, cnn_window_size: int, last_channel_num: int):
+    def __init__(self, cnn_method, in_channels, cnn_kernel_num, cnn_window_size, last_channel_num):
         super(Conv2D_Pool, self).__init__()
         assert cnn_method in ['naive', 'group3', 'group4']
         self.cnn_method = cnn_method
@@ -98,7 +98,7 @@ class Conv2D_Pool(nn.Module):
             return torch.cat([conv1_relu_pool, conv2_relu_pool, conv3_relu_pool, conv4_relu_pool], dim=1)
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, h: int, d_model: int, len_q: int, len_k: int, d_k: int, d_v: int):
+    def __init__(self, h, d_model, len_q, len_k, d_k, d_v):
         super(MultiHeadAttention, self).__init__()
         self.h = h                  # head_num                  O
         self.d_model = d_model      # word_embedding_dim        O
@@ -146,10 +146,36 @@ class MultiHeadAttention(nn.Module):
         return out
 
 
+class ScaledDotProduct_Attention(nn.Module):
+    def __init__(self, feature_dim, query_dim, attention_dim):
+        super(ScaledDotProduct_Attention, self).__init__()
+        self.K = nn.Linear(feature_dim, attention_dim, bias=False)
+        self.Q = nn.Linear(query_dim, attention_dim, bias=True)
+        self.attention_scalar = math.sqrt(float(attention_dim))
+
+    def initialize(self):
+        nn.init.xavier_uniform_(self.K.weight)
+        nn.init.xavier_uniform_(self.Q.weight)
+        nn.init.zeros_(self.Q.bias)
+
+    # Input
+    # feature : [batch_size, feature_num, feature_dim]
+    # query   : [batch_size, query_dim]
+    # mask    : [batch_size, feature_num]
+    # Output
+    # out     : [batch_size, feature_dim]
+    def forward(self, feature, query, mask=None):
+        a = torch.bmm(self.K(feature), self.Q(query).unsqueeze(dim=2)).squeeze(dim=2) / self.attention_scalar # [batch_size, feature_num]
+        if mask is not None:
+            alpha = F.softmax(a.masked_fill(mask == 0, -1e9), dim=1)                                          # [batch_size, feature_num]
+        else:
+            alpha = F.softmax(a, dim=1)                                                                       # [batch_size, feature_num]
+        out = torch.bmm(alpha.unsqueeze(dim=1), feature).squeeze(dim=1)                                       # [batch_size, feature_dim]
+        return out
 
 
 class Attention(nn.Module):
-    def __init__(self, feature_dim: int, attention_dim: int):
+    def __init__(self, feature_dim, attention_dim):
         super(Attention, self).__init__()
         self.affine1 = nn.Linear(feature_dim, attention_dim, bias=True)
         self.affine2 = nn.Linear(attention_dim, 1, bias=False)
@@ -182,7 +208,7 @@ class Attention(nn.Module):
 
 
 class ScaledDotProduct_CandidateAttention(nn.Module):
-    def __init__(self, feature_dim: int, query_dim: int, attention_dim: int):
+    def __init__(self, feature_dim, query_dim, attention_dim):
         super(ScaledDotProduct_CandidateAttention, self).__init__()
         self.K = nn.Linear(feature_dim, attention_dim, bias=False)
         self.Q = nn.Linear(query_dim, attention_dim, bias=True)
@@ -211,7 +237,7 @@ class ScaledDotProduct_CandidateAttention(nn.Module):
 # 주어진 feature와 query 간의 어텐션(attention)을 계산하는 모듈을 정의
 # 특정 쿼리(query)에 대해 입력 피쳐(feature) 중에서 중요한 부분에 가중치를 부여 > 중요도에 따라 가중합을 계산
 class CandidateAttention(nn.Module):
-    def __init__(self, feature_dim: int, query_dim: int, attention_dim: int):
+    def __init__(self, feature_dim, query_dim, attention_dim):
         super(CandidateAttention, self).__init__()
         self.feature_affine = nn.Linear(feature_dim, attention_dim, bias=False)
         self.query_affine = nn.Linear(query_dim, attention_dim, bias=True)
@@ -244,7 +270,7 @@ class CandidateAttention(nn.Module):
 
 
 class MultipleCandidateAttention(nn.Module):
-    def __init__(self, feature_dim: int, query_dim: int, attention_dim: int):
+    def __init__(self, feature_dim, query_dim, attention_dim):
         super(MultipleCandidateAttention, self).__init__()
         self.feature_affine = nn.Linear(feature_dim, attention_dim, bias=False)
         self.query_affine = nn.Linear(query_dim, attention_dim, bias=True)
@@ -302,9 +328,9 @@ class GCNLayer(nn.Module):
             out = out + feature                 # [batch_size, node_num, feature_num]
         return out
 
-class GCN(nn.Module):
+class GCN_(nn.Module):
     def __init__(self, in_dim, out_dim, hidden_dim=0, num_layers=1, dropout=0.1, residual=False, layer_norm=False):
-        super(GCN, self).__init__()
+        super(GCN_, self).__init__()
         self.num_layers = num_layers
         self.gcn_layers = []
         if self.num_layers == 1:

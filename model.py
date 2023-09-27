@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*- 
 from config import Config
 import torch
 import torch.nn as nn
@@ -8,7 +9,7 @@ import variantEncoders
 
 
 class Model(nn.Module):
-    def __init__(self, config: Config):
+    def __init__(self, config):
         super(Model, self).__init__()
         # For main experiments of news encoding
         if config.news_encoder == 'CIDER':

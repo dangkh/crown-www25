@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*- 
 import os
 import signal
 import shutil
@@ -14,11 +15,11 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-import wandb
+# import wandb
 
 
 class Trainer:
-    def __init__(self, model: nn.Module, config: Config, corpus: Corpus, run_index: int):
+    def __init__(self, model, config, corpus, run_index):
         self.model = model
         self.epoch = config.epoch
         self.batch_size = config.batch_size
@@ -75,6 +76,7 @@ class Trainer:
 
     def train(self):
         model = self.model
+        # wandb.watch(model, log='all')
         for e in tqdm(range(1, self.epoch + 1)):
             self.train_dataset.negative_sampling()
             train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.batch_size // 16, pin_memory=True)
@@ -106,7 +108,7 @@ class Trainer:
 
                 logits = model(user_ID, user_category, user_subCategory, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, \
                                news_category, news_subCategory, news_title_text, news_title_mask, news_title_entity, news_content_text, news_content_mask, news_content_entity) # [batch_size, 1 + negative_sample_num]
-
+                
                 loss = self.loss(logits)
                 if model.news_encoder.auxiliary_loss is not None:
                     news_auxiliary_loss = model.news_encoder.auxiliary_loss.mean()
@@ -124,15 +126,18 @@ class Trainer:
             print('loss =', epoch_loss / len(self.train_dataset))
             
             # validation
-            auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size * 3 // 2, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset) # self.batch_size * 3 // 2 (.8391)
+            auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size * 3 // 2, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset)
             self.auc_results.append(auc)
             self.mrr_results.append(mrr)
             self.ndcg5_results.append(ndcg5)
             self.ndcg10_results.append(ndcg10)
             print('Epoch %d : dev done\nDev criterions' % e)
             print('AUC = {:.4f}\nMRR = {:.4f}\nnDCG@5 = {:.4f}\nnDCG@10 = {:.4f}'.format(auc, mrr, ndcg5, ndcg10))
+            
+            # wandb.log({'valid_auc': auc, 'valid_mrr': mrr, 'valid_ndcg5': ndcg5, 'valid_ndcg10': ndcg10}, step=e)
+            
             if self.dev_criterion == 'auc':
-                # self.scheduler.step(auc)
+                self.scheduler.step(auc)
                 if auc >= self.best_dev_auc:
                     self.best_dev_auc = auc
                     self.best_dev_epoch = e
@@ -184,8 +189,6 @@ class Trainer:
                 else:
                     self.epoch_not_increase += 1
 
-            # wandb.log({'validation_auc': auc, 'val_precision': val_precision, 'val_accuracy': val_accuracy, 'val_recall': val_recall, 'val_weighted_f1': val_weighted_f1, 'val_micro_f1': val_micro_f1, 'val_macro_f1': val_macro_f1})
-            
             print('Best epoch :', self.best_dev_epoch)
             print('Best ' + self.dev_criterion + ' : ' + str(getattr(self, 'best_dev_' + self.dev_criterion)))
             torch.cuda.empty_cache()

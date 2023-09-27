@@ -5,14 +5,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence
 from torch.nn.utils.rnn import pad_packed_sequence
-from layers import Conv1D, Attention, ScaledDotProduct_CandidateAttention, GCN
+from layers import Conv1D, Attention, ScaledDotProduct_CandidateAttention, GCN_
 from torch_scatter import scatter_sum, scatter_softmax # need to be installed by following `https://pytorch-scatter.readthedocs.io/en/latest`
 from newsEncoders import NewsEncoder
 from userEncoders import UserEncoder
 
 
 class CNE_Title(NewsEncoder):
-    def __init__(self, config: Config):
+    def __init__(self, config):
         super(CNE_Title, self).__init__(config)
         self.max_title_length = config.max_title_length
         self.word_embedding_dim = config.word_embedding_dim
@@ -56,7 +56,7 @@ class CNE_Title(NewsEncoder):
 
 
 class CNE_Content(NewsEncoder):
-    def __init__(self, config: Config):
+    def __init__(self, config):
         super(CNE_Content, self).__init__(config)
         self.max_content_length = config.max_abstract_length
         self.word_embedding_dim = config.word_embedding_dim
@@ -100,7 +100,7 @@ class CNE_Content(NewsEncoder):
 
 
 class NAML_Title(NewsEncoder):
-    def __init__(self, config: Config):
+    def __init__(self, config):
         super(NAML_Title, self).__init__(config)
         self.max_title_length = config.max_title_length
         self.cnn_kernel_num = config.cnn_kernel_num
@@ -144,7 +144,7 @@ class NAML_Title(NewsEncoder):
 
 
 class NAML_Content(NewsEncoder):
-    def __init__(self, config: Config):
+    def __init__(self, config):
         super(NAML_Content, self).__init__(config)
         self.max_content_length = config.max_abstract_length
         self.cnn_kernel_num = config.cnn_kernel_num
@@ -188,7 +188,7 @@ class NAML_Content(NewsEncoder):
 
 
 class CNE_wo_CS(NewsEncoder):
-    def __init__(self, config: Config):
+    def __init__(self, config):
         super(CNE_wo_CS, self).__init__(config)
         self.max_title_length = config.max_title_length
         self.max_content_length = config.max_abstract_length
@@ -261,7 +261,7 @@ class CNE_wo_CS(NewsEncoder):
 
 
 class CNE_wo_CA(NewsEncoder):
-    def __init__(self, config: Config):
+    def __init__(self, config):
         super(CNE_wo_CA, self).__init__(config)
         self.max_title_length = config.max_title_length
         self.max_content_length = config.max_abstract_length
@@ -395,7 +395,7 @@ class SUE_wo_HCA(UserEncoder):
         super(SUE_wo_HCA, self).__init__(news_encoder, config)
         self.max_history_num = config.max_history_num
         self.proxy_node_embedding = nn.Parameter(torch.zeros([config.category_num, self.news_embedding_dim]))
-        self.gcn = GCN(in_dim=self.news_embedding_dim, out_dim=self.news_embedding_dim, hidden_dim=self.news_embedding_dim, num_layers=config.gcn_layer_num, dropout=config.dropout_rate / 2, residual=not config.no_gcn_residual, layer_norm=config.gcn_layer_norm)
+        self.gcn = GCN_(in_dim=self.news_embedding_dim, out_dim=self.news_embedding_dim, hidden_dim=self.news_embedding_dim, num_layers=config.gcn_layer_num, dropout=config.dropout_rate / 2, residual=not config.no_gcn_residual, layer_norm=config.gcn_layer_norm)
         self.attention = Attention(self.news_embedding_dim, config.attention_dim)
         self.dropout_ = nn.Dropout(p=config.dropout_rate, inplace=False)
 

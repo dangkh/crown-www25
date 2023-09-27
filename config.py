@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*- 
 import os
 import argparse
 import time
@@ -6,6 +7,18 @@ import random
 import numpy as np
 import json
 from prepare_dataset import prepare_MIND_small, preprocess_Adressa
+# import wandb
+
+# wandb.init(project='mind-find-best')
+
+# w_config = wandb.config
+
+# w_lr = w_config.lr
+# w_dropout_rate = w_config.dropout_rate
+# w_intent_num = w_config.intent_num
+# w_intent_embedding_dim = w_config.intent_embedding_dim
+# w_isab_num_inds = w_config.isab_num_inds
+# w_isab_num_heads = w_config.isab_num_heads
 
 # 필요한/필요 없는 config 추가/제거
 class Config:
@@ -22,7 +35,7 @@ class Config:
         parser.add_argument('--seed', type=int, default=0, help='Seed for random number generator')
         parser.add_argument('--config_file', type=str, default='', help='Config file path')
         # Dataset config
-        parser.add_argument('--dataset', type=str, default='adressa2', choices=['mind', 'adressa', 'adressa2'], help='Dataset type')
+        parser.add_argument('--dataset', type=str, default='mind', choices=['mind', 'adressa', 'adressa2'], help='Dataset type')
         parser.add_argument('--tokenizer', type=str, default='MIND', choices=['MIND', 'NLTK'], help='Sentence tokenizer')
         parser.add_argument('--word_threshold', type=int, default=3, help='Word threshold')
         parser.add_argument('--max_title_length', type=int, default=32, help='Sentence truncate length for title')
@@ -42,15 +55,15 @@ class Config:
         # Model config
         parser.add_argument('--num_layers', type=int, default=1, choices=[1, 2], help="The number of sub-encoder-layers in transformer encoder")
         parser.add_argument('--feedforward_dim', type=int, default=512, choices=[128, 256, 512, 1024], help="The dimension of the feedforward network model")
-        parser.add_argument('--head_num', type=int, default=10, choices=[3, 5, 10, 15], help='Head number of multi-head self-attention(required: word_embedding_dim // head_num == 0)')
-        parser.add_argument('--head_dim', type=int, default=20, help='Head dimension of multi-head self-attention')
-        parser.add_argument('--intent_embedding_dim', type=int, default=200, choices=[50, 100, 200, 400], help='Intent embedding dimension')
+        parser.add_argument('--head_num', type=int, default=10, choices=[3, 5, 10, 15, 20], help='Head number of multi-head self-attention')
+        parser.add_argument('--head_dim', type=int, default=15, help='Head dimension of multi-head self-attention') 
+        parser.add_argument('--intent_embedding_dim', type=int, default=400, choices=[100, 200, 300, 400], help='Intent embedding dimension')
         parser.add_argument('--intent_num', type=int, default=3, choices=[1, 2, 3, 4, 5], help='The number of title/body intent (k)')
         parser.add_argument('--dropout_rate', type=float, default=0.1, help='Dropout rate')
         parser.add_argument('--attention_dim', type=int, default=200, help="Attention dimension")
         parser.add_argument('--word_embedding_dim', type=int, default=300, choices=[50, 100, 200, 300], help='Word embedding dimension')
-        parser.add_argument('--isab_num_inds', type=int, default=4, choices=[2, 4, 6, 8], help='The number of inducing points')
-        parser.add_argument('--isab_num_heads', type=int, default=4, choices=[2, 4, 8], help='The number of ISAB heads')
+        parser.add_argument('--isab_num_inds', type=int, default=10, choices=[2, 4, 6, 8, 10], help='The number of inducing points')
+        parser.add_argument('--isab_num_heads', type=int, default=10, choices=[2, 4, 6, 10], help='The number of ISAB heads')
         
         parser.add_argument('--entity_embedding_dim', type=int, default=100, choices=[100], help='Entity embedding dimension')
         parser.add_argument('--context_embedding_dim', type=int, default=100, choices=[100], help='Context embedding dimension')
@@ -67,7 +80,7 @@ class Config:
         parser.add_argument('--no_gcn_residual', default=False, action='store_true', help='Whether apply residual connection to GCN')
         parser.add_argument('--gcn_layer_norm', default=False, action='store_true', help='Whether apply layer normalization to GCN')
         parser.add_argument('--hidden_dim', type=int, default=200, help='Encoder hidden dimension')
-        parser.add_argument('--Alpha', type=float, default=0.1, help='Reconstruction loss weight for DAE')
+        parser.add_argument('--alpha', type=float, default=0.1, help='Loss weight for category predictor')
         parser.add_argument('--long_term_masking_probability', type=float, default=0.1, help='Probability of masking long-term representation for LSTUR')
         parser.add_argument('--personalized_embedding_dim', type=int, default=200, help='Personalized embedding dimension for NPA')
         parser.add_argument('--click_predictor', type=str, default='dot_product', choices=['dot_product', 'mlp', 'sigmoid', 'FIM'], help='Click predictor')
@@ -75,12 +88,22 @@ class Config:
         self.attribute_dict = dict(vars(parser.parse_args()))
         for attribute in self.attribute_dict:
             setattr(self, attribute, self.attribute_dict[attribute])
+        # self.head_dim = (self.intent_embedding_dim * 2 + self.category_embedding_dim + self.subCategory_embedding_dim) // self.head_num
+
+        # for wandb config
+        # self.lr = w_lr
+        # self.dropout_rate = w_dropout_rate
+        # self.intent_num = w_intent_num
+        # self.intent_embedding_dim = w_intent_embedding_dim
+        # self.isab_num_inds = w_isab_num_inds
+        # self.isab_num_heads = w_isab_num_heads
+        
         if self.dataset in ['mind']:  
             # for MIND
             self.train_root = '../MIND-small/train'
             self.dev_root = '../MIND-small/dev'
             self.test_root = '../MIND-small/test'
-            self.max_history_num = 40
+            self.max_history_num = 30
         elif self.dataset in ['adressa2']:
             # for Adressa2 (adopt)
             self.train_root = '../Adressa-sample/train'
@@ -95,10 +118,13 @@ class Config:
             self.max_history_num = 40
 
         if self.dataset in ['mind']:
-            self.dropout_rate = 0.25
             self.gcn_layer_num = 3
-            self.epoch = 16
+            self.epoch = 10
+            self.dropout_rate = 0.25
+            self.device_id = 0
+            self.batch_size = 16
             self.max_abstract_length = 64
+            self.early_stopping_epoch = 4
         elif self.dataset in ['adressa', 'adressa2']:
             # self.dropout_rate = 0.2
             self.gcn_layer_num = 4
@@ -106,6 +132,11 @@ class Config:
             self.dropout_rate = 0.2
             self.gcn_layer_num = 4
             self.epoch = 16
+        # for wandb sweep ('mind-find-best')
+        # if self.intent_embedding_dim in [50, 100]:
+        #     self.device_id = 0
+        # elif self.intent_embedding_dim in [200, 400]:
+        #     self.device_id = 1
         self.seed = self.seed if self.seed >= 0 else (int)(time.time())
         self.attribute_dict['dropout_rate'] = self.dropout_rate
         self.attribute_dict['gcn_layer_num'] = self.gcn_layer_num
@@ -159,9 +190,11 @@ class Config:
             ]
         if not all(list(map(os.path.exists, dataset_files))):
             if self.dataset in ['adressa', 'adressa2']:
-                exec('preprocess_Adressa()')
+                preprocess_Adressa()
             else:
-                exec('prepare_MIND_%s()' % self.dataset)
+                prepare_function = getattr(self, 'prepare_MIND_%s' % self.dataset, None)
+                if prepare_function:
+                    prepare_function()
 
         model_name = self.news_encoder + '-' + self.user_encoder
         mkdirs = lambda x: os.makedirs(x) if not os.path.exists(x) else None

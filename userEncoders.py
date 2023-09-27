@@ -3,13 +3,14 @@ from config import Config
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch_geometric.nn import SAGEConv, GraphSAGE, GCN, GIN
 from torch.nn.utils.rnn import pack_padded_sequence
-from layers import MultiHeadAttention, Attention, ScaledDotProduct_CandidateAttention, CandidateAttention, GCN
+from layers import MultiHeadAttention, Attention, ScaledDotProduct_CandidateAttention, CandidateAttention, GCN_
 from newsEncoders import NewsEncoder
 from torch_scatter import scatter_sum, scatter_softmax # need to be installed by following `https://pytorch-scatter.readthedocs.io/en/latest`
 
 class UserEncoder(nn.Module):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(UserEncoder, self).__init__()
         self.news_embedding_dim = news_encoder.news_embedding_dim
         self.news_encoder = news_encoder
@@ -39,14 +40,83 @@ class UserEncoder(nn.Module):
 
 # Our proposed model: CIDER - user encoder
 class CIDER(UserEncoder):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(CIDER, self).__init__(news_encoder, config)
-        self.intent_embedding_dim = config.intent_embedding_dim                                         # for news rep. average / config.head_num=10, config.head_dim=20
-        # self.intent_embedding_dim_cat = config.intent_embedding_dim + config.intent_embedding_dim     # for news rep. concat  / config.head_num=10, config.head_dim=40
-        self.multiheadAttention = MultiHeadAttention(config.head_num, self.intent_embedding_dim, config.max_history_num, config.max_history_num, config.head_dim, config.head_dim)
-        self.affine = nn.Linear(config.head_num*config.head_dim, self.intent_embedding_dim, bias=True)
-        self.attention = Attention(self.intent_embedding_dim, config.attention_dim)
+        
+        self.attention_dim = config.attention_dim
+        self.graph_sage = GraphSAGE(in_channels = self.news_embedding_dim,
+                                    hidden_channels = self.news_embedding_dim,
+                                    num_layers = 1,
+                                    out_channels = self.news_embedding_dim,
+                                    dropout = config.dropout_rate)
 
+        self.K = nn.Linear(self.news_embedding_dim, self.attention_dim, bias=False)
+        self.Q = nn.Linear(self.news_embedding_dim, self.attention_dim, bias=True)
+        self.max_history_num = config.max_history_num
+        self.attention_scalar = math.sqrt(float(self.attention_dim))
+        self.affine = nn.Linear(self.news_embedding_dim, self.news_embedding_dim, bias=True)
+        self.dropout = nn.Dropout(p=config.dropout_rate, inplace=True)
+        self.attention = Attention(self.news_embedding_dim, config.attention_dim)
+    
+    def initialize(self):
+        nn.init.xavier_uniform_(self.K.weight)
+        nn.init.xavier_uniform_(self.Q.weight)
+        nn.init.zeros_(self.Q.bias)
+        nn.init.xavier_uniform_(self.affine.weight, gain=nn.init.calculate_gain('relu'))
+        nn.init.zeros_(self.affine.bias)
+        self.attention.initialize()
+
+    def create_bipartite_graph(self, user_history_mask, device):
+        
+        num_users, max_history_num = user_history_mask.size() 
+        row_indices = torch.arange(num_users).view(-1, 1).repeat(1, max_history_num).view(-1).to(device) 
+        col_indices = torch.arange(max_history_num).view(1, -1).repeat(num_users, 1).view(-1).to(device) 
+        edge_index = torch.stack([row_indices, col_indices], dim=0) 
+        
+        return edge_index
+
+    def forward(self, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_category, user_subCategory, \
+                user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, user_embedding, candidate_news_representation):
+        batch_size = user_title_text.size(0)
+        news_num = candidate_news_representation.size(1)
+        batch_news_num = batch_size * news_num
+        history_embedding = self.news_encoder(user_title_text, user_title_mask, user_title_entity, \
+                                              user_content_text, user_content_mask, user_content_entity, \
+                                              user_category, user_subCategory, user_embedding)                  # [batch_size, max_history_num, news_embedding_dim]
+        
+        # Create user-news bipartite graph
+        edge_index = self.create_bipartite_graph(user_history_mask, history_embedding.device)
+        
+        # GNN convolution    
+        gcn_feature = self.graph_sage(history_embedding, edge_index)
+        gcn_feature = gcn_feature.unsqueeze(dim=1).expand(-1, news_num, -1, -1)                 # [batch_size, news_num, max_history_num, news_embedding_dim]
+        
+        # Attention
+        K = self.K(gcn_feature).view([batch_news_num, self.max_history_num, self.attention_dim])            # [batch_size * news_num, max_history_num, attention_dim]
+        Q = self.Q(candidate_news_representation).view([batch_news_num, self.attention_dim, 1])             # [batch_size * news_num, attention_dim, 1]
+        a = torch.bmm(K, Q).view([batch_news_num, self.max_history_num]) / self.attention_scalar            # [batch_size * news_num, max_history_num]
+        alpha = F.softmax(a, dim=1)                                                                         # [batch_size * news_num, max_history_num]
+        # bmm input: [batch_size * news_num, 1, max_history_num]
+        # bmm mat2: [batch_size * news_num, max_history_num, news_embedding_dim]
+        # bmm out: [batch_size * news_num, 1, news_embedding_dim]
+        out = torch.bmm(alpha.unsqueeze(dim=1), gcn_feature.reshape([batch_news_num, self.max_history_num, self.news_embedding_dim]))       # [batch_size * news_num, 1, news_embedding_dim]
+        out = out.squeeze(dim=1).view([batch_size, news_num, self.news_embedding_dim])                                                      # [batch_size, news_num, news_embedding_dim]
+        
+        user_representation = out # self.dropout(F.relu(self.affine(out), inplace=True) + out)                                                    # [batch_size, news_num, news_embedding_dim]
+        # Apply average 
+        # user_representation = gcn_feature.mean(dim=1).unsqueeze(dim=1).expand(-1, news_num, -1) # [batch_size, news_num, news_embedding_dim]
+        
+        return user_representation                                                          # [batch_size, news_num, news_embedding_dim]
+
+
+class CIDER_backup(UserEncoder):
+    def __init__(self, news_encoder, config):
+        super(CIDER_backup, self).__init__(news_encoder, config)
+        
+        self.multiheadAttention = MultiHeadAttention(config.head_num, self.news_embedding_dim, config.max_history_num, config.max_history_num, config.head_dim, config.head_dim)
+        self.affine = nn.Linear(config.head_num * config.head_dim, self.news_embedding_dim, bias=True)
+        self.attention = Attention(self.news_embedding_dim, config.attention_dim)
+    
     def initialize(self):
         self.multiheadAttention.initialize()
         nn.init.xavier_uniform_(self.affine.weight, gain=nn.init.calculate_gain('relu'))
@@ -55,23 +125,30 @@ class CIDER(UserEncoder):
 
     def forward(self, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_category, user_subCategory, \
                 user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, user_embedding, candidate_news_representation):
+        batch_size = user_title_text.size(0)
         news_num = candidate_news_representation.size(1)
         history_embedding = self.news_encoder(user_title_text, user_title_mask, user_title_entity, \
                                               user_content_text, user_content_mask, user_content_entity, \
-                                              user_category, user_subCategory, user_embedding)                  # [batch_size, max_history_num, intent_embedding_dim]
+                                              user_category, user_subCategory, user_embedding)                  # [batch_size, max_history_num, news_embedding_dim]
+        # print('history_embedding shape: ', history_embedding.shape)
         h = self.multiheadAttention(history_embedding, history_embedding, history_embedding, user_history_mask) # [batch_size, max_history_num, head_num * head_dim]
-        h = F.relu(F.dropout(self.affine(h), training=self.training, inplace=True), inplace=True)               # [batch_size, max_history_num, intent_embedding_dim]
-        user_representation = self.attention(h).unsqueeze(dim=1).repeat(1, news_num, 1)                         # [batch_size, news_num, intent_embedding_dim]
+        h = F.relu(F.dropout(self.affine(h), training=self.training, inplace=True), inplace=True)               # [batch_size, max_history_num, news_embedding_dim]
+        user_representation = self.attention(h).unsqueeze(dim=1).repeat(1, news_num, 1)                         # [batch_size, news_num, news_embedding_dim]
         return user_representation
 
 
 # Structural User Encoding(SUE)
 class SUE(UserEncoder):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(SUE, self).__init__(news_encoder, config)
         self.attention_dim = max(config.attention_dim, self.news_embedding_dim // 4)
         self.proxy_node_embedding = nn.Parameter(torch.zeros([config.category_num, self.news_embedding_dim]))
-        self.gcn = GCN(in_dim=self.news_embedding_dim, out_dim=self.news_embedding_dim, hidden_dim=self.news_embedding_dim, num_layers=config.gcn_layer_num, dropout=config.dropout_rate / 2, residual=not config.no_gcn_residual, layer_norm=config.gcn_layer_norm)
+        # Input
+        # feature : [batch_size, node_num, feature_dim]
+        # graph   : [batch_size, node_num, node_num]
+        # Output
+        # out     : [batch_size, node_num, feature_dim]
+        self.gcn = GCN_(in_dim=self.news_embedding_dim, out_dim=self.news_embedding_dim, hidden_dim=self.news_embedding_dim, num_layers=config.gcn_layer_num, dropout=config.dropout_rate / 2, residual=not config.no_gcn_residual, layer_norm=config.gcn_layer_norm)
         self.intraCluster_K = nn.Linear(self.news_embedding_dim, self.attention_dim, bias=False)
         self.intraCluster_Q = nn.Linear(self.news_embedding_dim, self.attention_dim, bias=True)
         self.clusterFeatureAffine = nn.Linear(self.news_embedding_dim, self.news_embedding_dim, bias=True)
@@ -128,7 +205,7 @@ class SUE(UserEncoder):
 
 # LSTUR(Long Short-Term User Representations)
 class LSTUR(UserEncoder):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(LSTUR, self).__init__(news_encoder, config)
         self.masking_probability = 1.0 - config.long_term_masking_probability
         self.gru = nn.GRU(self.news_embedding_dim, self.news_embedding_dim, batch_first=True)
@@ -178,7 +255,7 @@ class LSTUR(UserEncoder):
 
 
 class MHSA(UserEncoder):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(MHSA, self).__init__(news_encoder, config)
         self.multiheadAttention = MultiHeadAttention(config.head_num, self.news_embedding_dim, config.max_history_num, config.max_history_num, config.head_dim, config.head_dim)
         self.affine = nn.Linear(config.head_num*config.head_dim, self.news_embedding_dim, bias=True)
@@ -203,7 +280,7 @@ class MHSA(UserEncoder):
 
 # NPA - user encoder
 class PUE(UserEncoder):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(PUE, self).__init__(news_encoder, config)
         self.dense = nn.Linear(config.user_embedding_dim, config.personalized_embedding_dim, bias=True)
         self.personalizedAttention = CandidateAttention(self.news_embedding_dim, config.personalized_embedding_dim, config.attention_dim)
@@ -225,7 +302,7 @@ class PUE(UserEncoder):
 
 
 class ATT(UserEncoder):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(ATT, self).__init__(news_encoder, config)
         self.attention = Attention(self.news_embedding_dim, config.attention_dim)
 
@@ -243,7 +320,7 @@ class ATT(UserEncoder):
 
 
 class CATT(UserEncoder):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(CATT, self).__init__(news_encoder, config)
         self.affine1 = nn.Linear(self.news_embedding_dim * 2, config.attention_dim, bias=True)
         self.affine2 = nn.Linear(config.attention_dim, 1, bias=True)
@@ -273,7 +350,7 @@ class CATT(UserEncoder):
 
 
 class GRU(UserEncoder):
-    def __init__(self, news_encoder: NewsEncoder, config: Config):
+    def __init__(self, news_encoder, config):
         super(GRU, self).__init__(news_encoder, config)
         self.gru = nn.GRU(self.news_embedding_dim, config.hidden_dim, batch_first=True)
         self.dec = nn.Linear(config.hidden_dim, self.news_embedding_dim, bias=True)

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*- 
 import os
 import torch
 import torch.nn as nn
@@ -7,7 +8,7 @@ from torch.utils.data import DataLoader
 from evaluate import scoring
 
 
-def compute_scores(model: nn.Module, corpus: Corpus, batch_size: int, mode: str, result_file: str, dataset: str):
+def compute_scores(model, corpus, batch_size, mode, result_file, dataset):
     assert mode in ['dev', 'test'], 'mode must be chosen from \'dev\' or \'test\''
     dataloader = DataLoader(DevTest_Dataset(corpus, mode), batch_size=batch_size, shuffle=False, num_workers=batch_size // 16, pin_memory=True)
     indices = (corpus.dev_indices if mode == 'dev' else corpus.test_indices)
@@ -68,7 +69,7 @@ def compute_scores(model: nn.Module, corpus: Corpus, batch_size: int, mode: str,
         return None, None, None, None
 
 
-def get_run_index(result_dir: str):
+def get_run_index(result_dir):
     assert os.path.exists(result_dir), 'result directory does not exist'
     max_index = 0
     for result_file in os.listdir(result_dir):
