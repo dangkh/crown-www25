@@ -33,7 +33,7 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 
  1. Recommendation accuracy of CIDER with/without the category information in MIND and Adressa datasets.
 
-|                    | Adressa                         |||| MIND-small                         ||||
+|                    | Adressa                      |||   | MIND-small                       |||  |
 |--------------------|:-------:|:-----:|:------:|:-------:|:----------:|:-----:|:------:|:-------:|
 |                    |   AUC   |  MRR  | nDCG@5 | nDCG@10 |     AUC    |  MRR  | nDCG@5 | nDCG@10 |
 | CIDER w/o category |  83.85  | 52.84 |  55.33 |  60.35  |    68.06   | 32.82 |  36.51 |  42.59  |
