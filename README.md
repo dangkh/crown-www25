@@ -33,13 +33,13 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 
  1. The recommendation accuracy of CIDER with/without the category information in MIND and Adressa datasets.
 
-### *__MIND-small__*
+### - *__MIND-small__*
 |                      |  AUC  |  MRR  | nDCG@5 |  nDCG@10 |   
 |----------------------|:-----:|:-----:|:------:|:--------:|
 | CIDER   w/o category | 68.06 | 32.82 |  36.51 |   42.59  |
 |  CIDER   w/ category | 68.23 | 33.54 |  36.97 | 42.93    |
 
-### *__Adressa__*
+### - *__Adressa__*
 |                    |   AUC  |  MRR  | nDCG@5 | nDCG@10 |
 |--------------------|:------:|:-----:|:------:|:-------:|
 | CIDER w/o category |  83.85 | 52.84 |  55.33 |  60.35  |
@@ -75,7 +75,7 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 
 4. The results of eight CIDER variants.
 
-### *__MIND-small__*
+### - *__MIND-small__*
 | (S1) | (S2) | (S3) |  AUC  |  MRR  | nDCG@5 |  nDCG@10 |
 |:----:|:----:|:----:|:-----:|:-----:|:------:|:--------:|
 |   X  |   X  |   X  | 66.24 | 31.39 |  34.84 |   40.95  |
@@ -87,7 +87,7 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 |   O  |   O  |   X  | 67.93 | 32.46 |  36.11 |   42.3   |
 |   O  |   O  |   O  | 68.23 | 33.54 |  36.97 | 42.93    |
 
-### *__Adressa__*
+### - *__Adressa__*
 | (S1) | (S2) | (S3) |  AUC  |  MRR  | nDCG@5 | nDCG@10 |
 |:----:|:----:|:----:|:-----:|:-----:|:------:|:-------:|
 |   X  |   X  |   X  | 77.89 | 48.31 |  49.04 |  55.46  |
@@ -104,13 +104,13 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 
 5. The improvement (%) of CIDER and CNE-SUE over their best competitors (i.e., CNE-SUE and NAML) in MIND and Adressa.
 
-### *__MIND-small__*
+### - *__MIND-small__*
 |                    | AUC (%) | MRR (%) | nDCG@5 (%) | nDCG@10 (%) | Time (s/it) |
 |--------------------|:-------:|:-------:|:----------:|:-----------:|:-----------:|
 | CIDER (vs CNE-SUE) |   0.91  |   4.19  |    3.49    |     2.14    |    1301.8   |
 |  CNE-SUE (vs NAML) |   1.34  |   0.71  |     1.4    |     1.13    |      -      | 
 
-### *__Adressa__*
+### - *__Adressa__*
 |                    | AUC (%) | MRR (%) | nDCG@5 (%) | nDCG@10 (%) | Time (s/it) |
 |--------------------|:----:|:----:|:------:|:-------:|:-----:|
 | CIDER (vs CNE-SUE) | 4.19 | 6.31 |  12.81 |   7.04  | 957.4 |
