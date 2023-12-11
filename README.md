@@ -39,12 +39,20 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 | CIDER   w/o category |    68.06   | 32.82 |  36.51 |   42.59  |  83.85  | 52.84 |  55.33 |  60.35  |
 |  CIDER   w/ category |  **68.23** | **33.54** |  **36.97** | **42.93**    |  **84.13**  | **53.93** |  **56.64** |  **61.15**  |
 
+
+---
+
+
  2. Training time (new) and AUC scores (reported at the submission) of three methods.
 
 |         | NPA (Training time / AUC) | CNE-SUE (Training time / AUC) | **CIDER** (Training time / AUC) |
 |---------|:-------------------------:|:-----------------------------:|:---------------------------:|
 |   MIND  |       382.07 / 65.42      |        1482.26 / 67.61        |       1301.89 / 68.23       |
 | Adressa |       228.99 / 67.04      |        1034.67 / 80.74        |        957.46 / 84.13       |
+
+
+---
+
 
 3. The recommendation accuracy for cold-start users (# of clicked news articles <= 5).
 
@@ -55,6 +63,10 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 |   NAML  |  66.48 → 61.18  (-8.66%) | 31.42 → 31.39  (-0.10%) | 34.80 → 34.05  (-2.20%) | 41.12 → 40.17  (-2.36%) |
 | CNE-SUE | 67.61 → 59.85  (-12.97%) | 32.19 → 29.45  (-9.30%) | 35.72 → 32.75  (-9.07%) | 42.03 → 38.73  (-8.52%) |
 |  CIDER  |  **68.23 → 62.86** (-8.54%)  | **33.54 → 32.54**  (-3.07%) | **36.97 → 35.78**  (-3.33%) | **42.93 → 41.50**  (-3.45%) |
+
+
+---
+
 
 4. The results of eight CIDER variants.
 
@@ -70,6 +82,10 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 |       O      |   O  |   X  |    67.93   | 32.46 |  36.11 |   42.3   |  83.43  | 52.77 |  55.18 |  60.32  |
 |       O      |   O  |   O  |    **68.23**   | **33.54** |  **36.97** | **42.93**    |  **84.13**  | **53.93** |  **56.64** |  **61.14**  |
 
+
+---
+
+
 5. The improvement (%) of CIDER and CNE-SUE over their best competitors (i.e., CNE-SUE and NAML) in MIND and Adressa.
 
 |                    | MIND-small |        |           |            |            | Adressa |        |           |            |            |
@@ -77,6 +93,10 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 |                    |   AUC(%)   | MRR(%) | nDCG@5(%) | nDCG@10(%) | Time(s/it) |  AUC(%) | MRR(%) | nDCG@5(%) | nDCG@10(%) | Time(s/it) |
 | CIDER (vs CNE-SUE) |    0.91    |  4.19  |    3.49   |    2.14    |   1301.8   |   4.19  |  6.31  |   12.81   |    7.04    |    957.4   |
 |  CNE-SUE (vs NAML) |    1.34    |  0.71  |    1.40   |    1.13    |      -     |    -    |    -   |     -     |      -     |      -     |
+
+
+---
+
 
 6. The hyper-parameters settings.
 
@@ -98,3 +118,4 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 |      isab inducing points num      |    4    |                                   -                                  |
 |            isab head num           |    4    |                                   -                                  |
 
+---
