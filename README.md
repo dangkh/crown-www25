@@ -1,7 +1,7 @@
-# [WWW'24] CIDER: Category-aware Intent Disentanglement for Accurate News Recommendations
+# [KDD'24] CROWN: A Novel Approach to Comprehending Users' Preferences for Accurate Personalized News Recommendation
 
-## The overview of KHAN
-![The overview of KHAN](./assets/overview.PNG)
+## The overview of CROWN
+![The overview of CROWN](./assets/overview.PNG)
 
 ## Available dataset
 1. [MIND Dataset](https://msnews.github.io/)
