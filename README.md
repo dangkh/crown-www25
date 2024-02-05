@@ -26,31 +26,31 @@ sklearn
 ```
 ## How to run
 ```
-python main.py --news_encoder=CIDER --user_encoder=CIDER
+python main.py --news_encoder=CROWN --user_encoder=CROWN
 ```
 
 ## Experiments Results for Rebuttal
 
- 1. The recommendation accuracy of CIDER with/without the category information in MIND and Adressa datasets.
+ 1. The recommendation accuracy of CROWN with/without the category information in MIND and Adressa datasets.
 
 ### - *__MIND-small__*
 |                      |  AUC  |  MRR  | nDCG@5 |  nDCG@10 |   
 |----------------------|:-----:|:-----:|:------:|:--------:|
-| CIDER   w/o category | 68.06 | 32.82 |  36.51 |   42.59  |
-|  CIDER   w/ category | 68.23 | 33.54 |  36.97 | 42.93    |
+| CROWN   w/o category | 68.06 | 32.82 |  36.51 |   42.59  |
+|  CROWN   w/ category | 68.23 | 33.54 |  36.97 | 42.93    |
 
 ### - *__Adressa__*
 |                    |   AUC  |  MRR  | nDCG@5 | nDCG@10 |
 |--------------------|:------:|:-----:|:------:|:-------:|
-| CIDER w/o category |  83.85 | 52.84 |  55.33 |  60.35  |
-|  CIDER w/ category | 84.13  | 53.93 |  56.64 |  61.15  |
+| CROWN w/o category |  83.85 | 52.84 |  55.33 |  60.35  |
+|  CROWN w/ category | 84.13  | 53.93 |  56.64 |  61.15  |
 
 ---
 
 
  2. Training time (new) and AUC scores (reported at the submission) of three methods.
 
-|         | NPA (Training time / AUC) | CNE-SUE (Training time / AUC) | **CIDER** (Training time / AUC) |
+|         | NPA (Training time / AUC) | CNE-SUE (Training time / AUC) | **CROWN** (Training time / AUC) |
 |---------|:-------------------------:|:-----------------------------:|:---------------------------:|
 | *__MIND-small__*  |       382.07 / 65.42      |        1482.26 / 67.61        |       1301.89 / 68.23       |
 | *__Adressa__* |       228.99 / 67.04      |        1034.67 / 80.74        |        957.46 / 84.13       |
@@ -63,17 +63,23 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 
 |         |            AUC           |           MRR           |          nDCG@5         |         nDCG@10         |
 |---------|:------------------------:|:-----------------------:|:-----------------------:|:-----------------------:|
+|  LibFM  | 60.39 → 50.20 (-20.29%) | 28.35 → 25.09 (-12.99%) | 30.40 → 25.92 (-17.28%) | 36.58 → 32.09 (-13.99%) |
+|   DSSM  |  62.35 → 58.32 (-6.91%) | 28.34 → 28.10  (-0.85%) | 30.94 → 30.36  (-1.91%) | 37.48 → 36.70  (-2.13%) |
 |   NPA   |  65.42 → 60.22 (-8.64%) | 30.92 → 30.80  (-0.39%) | 34.08 → 33.51  (-1.70%) | 40.39 → 39.51  (-2.23%) |
-|   NRMS  | 66.23 → 60.21 ( -9.99%) | 31.34 → 31.23  (-0.35%) | 34.53 → 33.77  (-2.25%) | 41.35 → 39.76  (-1.48%) |
+|   NRMS  |  66.23 → 60.21 (-9.99%) | 31.34 → 31.23  (-0.35%) | 34.53 → 33.77  (-2.25%) | 41.35 → 39.76  (-1.48%) |
 |   NAML  |  66.48 → 61.18 (-8.66%) | 31.42 → 31.39  (-0.10%) | 34.80 → 34.05  (-2.20%) | 41.12 → 40.17  (-2.36%) |
+|  LSTUR  | 66.12 → 59.08 (-11.92%) | 31.21 → 30.03  (-3.93%) | 34.61 → 32.38  (-6.89%) | 40.56 → 38.61  (-5.05%) |
+|   FIM   |  65.71 → 60.73 (-8.20%) | 30.93 → 30.66  (-0.88%) | 34.28 → 33.89  (-1.15%) | 40.47 → 39.59  (-2.22%) |
+|  HieRec | 67.18 → 61.04 (-10.05%) | 31.69 → 31.28  (-1.31%) | 35.32 → 34.25  (-3.12%) | 41.61 → 39.86  (-4.39%) | 
+| DIGAT w/o PLM |  67.13 → 58.26 (-15.22%) | 32.15 → 29.52 (-8.90%) | 35.64 → 32.08 (-11.09%) | 41.95 → 38.04 (-10.28%) |
 | CNE-SUE | 67.61 → 59.85 (-12.97%) | 32.19 → 29.45  (-9.30%) | 35.72 → 32.75  (-9.07%) | 42.03 → 38.73  (-8.52%) |
-|  CIDER  |  **68.23 → 62.86** (-8.54%)  | **33.54 → 32.54**  (-3.07%) | **36.97 → 35.78**  (-3.33%) | **42.93 → 41.50**  (-3.45%) |
+|  CROWN  |  **68.23 → 62.86** (-8.54%)  | **33.54 → 32.54**  (-3.07%) | **36.97 → 35.78**  (-3.33%) | **42.93 → 41.50**  (-3.45%) |
 
 
 ---
 
 
-4. The results of eight CIDER variants.
+4. The results of eight CROWN variants.
 
 ### - *__MIND-small__*
 | (S1) | (S2) | (S3) |  AUC  |  MRR  | nDCG@5 |  nDCG@10 |
@@ -102,18 +108,18 @@ python main.py --news_encoder=CIDER --user_encoder=CIDER
 ---
 
 
-5. The improvement (%) of CIDER and CNE-SUE over their best competitors (i.e., CNE-SUE and NAML) in MIND and Adressa.
+5. The improvement (%) of CROWN and CNE-SUE over their best competitors (i.e., CNE-SUE and NAML) in MIND and Adressa.
 
 ### - *__MIND-small__*
 |                    | AUC (%) | MRR (%) | nDCG@5 (%) | nDCG@10 (%) | Time (s/it) |
 |--------------------|:-------:|:-------:|:----------:|:-----------:|:-----------:|
-| CIDER (vs CNE-SUE) |   0.91  |   4.19  |    3.49    |     2.14    |    1301.8   |
+| CROWN (vs CNE-SUE) |   0.91  |   4.19  |    3.49    |     2.14    |    1301.8   |
 |  CNE-SUE (vs NAML) |   1.34  |   0.71  |     1.4    |     1.13    |      -      | 
 
 ### - *__Adressa__*
 |                    | AUC (%) | MRR (%) | nDCG@5 (%) | nDCG@10 (%) | Time (s/it) |
 |--------------------|:----:|:----:|:------:|:-------:|:-----:|
-| CIDER (vs CNE-SUE) | 4.19 | 6.31 |  12.81 |   7.04  | 957.4 |
+| CROWN (vs CNE-SUE) | 4.19 | 6.31 |  12.81 |   7.04  | 957.4 |
 |  CNE-SUE (vs NAML) |   -  |   -  |    -   |    -    |  -    |
 
 ---
