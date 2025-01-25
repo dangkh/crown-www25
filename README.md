@@ -1,4 +1,4 @@
-# [KDD'24] CROWN: A Novel Approach to Comprehending Users' Preferences for Accurate Personalized News Recommendation
+# [WWW'25] CROWN: A Novel Approach to Comprehending Users' Preferences for Accurate Personalized News Recommendation
 
 ## The overview of CROWN
 ![The overview of CROWN](./assets/overview.PNG)
