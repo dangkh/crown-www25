@@ -7,27 +7,14 @@ import random
 import numpy as np
 import json
 from prepare_dataset import prepare_MIND_small, preprocess_Adressa
-# import wandb
 
-# wandb.init(project='mind-find-best')
-
-# w_config = wandb.config
-
-# w_lr = w_config.lr
-# w_dropout_rate = w_config.dropout_rate
-# w_intent_num = w_config.intent_num
-# w_intent_embedding_dim = w_config.intent_embedding_dim
-# w_isab_num_inds = w_config.isab_num_inds
-# w_isab_num_heads = w_config.isab_num_heads
-
-# 필요한/필요 없는 config 추가/제거
 class Config:
     def parse_argument(self):
         parser = argparse.ArgumentParser(description='Neural news recommendation')
         # General config
         parser.add_argument('--mode', type=str, default='train', choices=['train', 'dev', 'test'], help='Mode')
-        parser.add_argument('--news_encoder', type=str, default='CIDER', choices=['CIDER', 'CNE', 'CNN', 'MHSA', 'KCNN', 'HDC', 'NAML', 'PNE', 'DAE', 'Inception', 'NAML_Title', 'NAML_Content', 'CNE_Title', 'CNE_Content', 'CNE_wo_CS', 'CNE_wo_CA'], help='News encoder')
-        parser.add_argument('--user_encoder', type=str, default='CIDER', choices=['CIDER', 'SUE', 'LSTUR', 'MHSA', 'ATT', 'CATT', 'FIM', 'PUE', 'GRU', 'OMAP', 'SUE_wo_GCN', 'SUE_wo_HCA'], help='User encoder')
+        parser.add_argument('--news_encoder', type=str, default='CROWN', choices=['CROWN', 'CNE', 'CNN', 'MHSA', 'KCNN', 'HDC', 'NAML', 'PNE', 'DAE', 'Inception', 'NAML_Title', 'NAML_Content'], help='News encoder')
+        parser.add_argument('--user_encoder', type=str, default='CROWN', choices=['CROWN', 'SUE', 'LSTUR', 'MHSA', 'ATT', 'CATT', 'FIM', 'PUE', 'GRU', 'OMAP'], help='User encoder')
         parser.add_argument('--dev_model_path', type=str, default='', help='Dev model path')
         parser.add_argument('--test_model_path', type=str, default='', help='Test model path')
         parser.add_argument('--test_output_file', type=str, default='', help='Specific test output file')
@@ -35,15 +22,15 @@ class Config:
         parser.add_argument('--seed', type=int, default=0, help='Seed for random number generator')
         parser.add_argument('--config_file', type=str, default='', help='Config file path')
         # Dataset config
-        parser.add_argument('--dataset', type=str, default='mind', choices=['mind', 'adressa', 'adressa2'], help='Dataset type')
+        parser.add_argument('--dataset', type=str, default='mind', choices=['mind', 'adressa'], help='Dataset type')
         parser.add_argument('--tokenizer', type=str, default='MIND', choices=['MIND', 'NLTK'], help='Sentence tokenizer')
         parser.add_argument('--word_threshold', type=int, default=3, help='Word threshold')
         parser.add_argument('--max_title_length', type=int, default=32, help='Sentence truncate length for title')
-        parser.add_argument('--max_abstract_length', type=int, default=128, help='Sentence truncate length for abstract') #128
+        parser.add_argument('--max_abstract_length', type=int, default=128, help='Sentence truncate length for abstract') 
         # Training config
         parser.add_argument('--negative_sample_num', type=int, default=4, help='Negative sample number of each positive sample')
-        parser.add_argument('--max_history_num', type=int, default=40, help='Maximum number of history news for each user')
-        parser.add_argument('--epoch', type=int, default=10, help='Training epoch')
+        parser.add_argument('--max_history_num', type=int, default=50, help='Maximum number of history news for each user')
+        parser.add_argument('--epoch', type=int, default=16, help='Training epoch')
         parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
         parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
         parser.add_argument('--weight_decay', type=float, default=0, help='Optimizer weight decay')
@@ -56,14 +43,15 @@ class Config:
         parser.add_argument('--num_layers', type=int, default=1, choices=[1, 2], help="The number of sub-encoder-layers in transformer encoder")
         parser.add_argument('--feedforward_dim', type=int, default=512, choices=[128, 256, 512, 1024], help="The dimension of the feedforward network model")
         parser.add_argument('--head_num', type=int, default=10, choices=[3, 5, 10, 15, 20], help='Head number of multi-head self-attention')
-        parser.add_argument('--head_dim', type=int, default=15, help='Head dimension of multi-head self-attention') 
+        parser.add_argument('--head_dim', type=int, default=20, help='Head dimension of multi-head self-attention') 
         parser.add_argument('--intent_embedding_dim', type=int, default=400, choices=[100, 200, 300, 400], help='Intent embedding dimension')
         parser.add_argument('--intent_num', type=int, default=3, choices=[1, 2, 3, 4, 5], help='The number of title/body intent (k)')
-        parser.add_argument('--dropout_rate', type=float, default=0.1, help='Dropout rate')
-        parser.add_argument('--attention_dim', type=int, default=200, help="Attention dimension")
+        parser.add_argument('--dropout_rate', type=float, default=0.2, help='Dropout rate')
+        parser.add_argument('--attention_dim', type=int, default=400, help="Attention dimension")
         parser.add_argument('--word_embedding_dim', type=int, default=300, choices=[50, 100, 200, 300], help='Word embedding dimension')
-        parser.add_argument('--isab_num_inds', type=int, default=10, choices=[2, 4, 6, 8, 10], help='The number of inducing points')
-        parser.add_argument('--isab_num_heads', type=int, default=10, choices=[2, 4, 6, 10], help='The number of ISAB heads')
+        parser.add_argument('--isab_num_inds', type=int, default=4, choices=[2, 4, 6, 8, 10], help='The number of inducing points')
+        parser.add_argument('--isab_num_heads', type=int, default=4, choices=[2, 4, 6, 10], help='The number of ISAB heads')
+        parser.add_argument('--alpha', type=float, default=0.3, help='Loss weight for category predictor')
         
         parser.add_argument('--entity_embedding_dim', type=int, default=100, choices=[100], help='Entity embedding dimension')
         parser.add_argument('--context_embedding_dim', type=int, default=100, choices=[100], help='Context embedding dimension')
@@ -79,68 +67,67 @@ class Config:
         parser.add_argument('--gcn_layer_num', type=int, default=4, help='Number of GCN layer')
         parser.add_argument('--no_gcn_residual', default=False, action='store_true', help='Whether apply residual connection to GCN')
         parser.add_argument('--gcn_layer_norm', default=False, action='store_true', help='Whether apply layer normalization to GCN')
-        parser.add_argument('--hidden_dim', type=int, default=200, help='Encoder hidden dimension')
-        parser.add_argument('--alpha', type=float, default=0.1, help='Loss weight for category predictor')
+        parser.add_argument('--hidden_dim', type=int, default=400, help='Encoder hidden dimension')
         parser.add_argument('--long_term_masking_probability', type=float, default=0.1, help='Probability of masking long-term representation for LSTUR')
         parser.add_argument('--personalized_embedding_dim', type=int, default=200, help='Personalized embedding dimension for NPA')
+        parser.add_argument('--HDC_window_size', type=int, default=3, help='Convolution window size of HDC for FIM')
+        parser.add_argument('--HDC_filter_num', type=int, default=150, help='Convolution filter num of HDC for FIM')
+        parser.add_argument('--conv3D_filter_num_first', type=int, default=32, help='3D matching convolution filter num of the first layer for FIM ')
+        parser.add_argument('--conv3D_kernel_size_first', type=int, default=3, help='3D matching convolution kernel size of the first layer for FIM')
+        parser.add_argument('--conv3D_filter_num_second', type=int, default=16, help='3D matching convolution filter num of the second layer for FIM ')
+        parser.add_argument('--conv3D_kernel_size_second', type=int, default=3, help='3D matching convolution kernel size of the second layer for FIM')
+        parser.add_argument('--maxpooling3D_size', type=int, default=3, help='3D matching pooling size for FIM ')
+        parser.add_argument('--maxpooling3D_stride', type=int, default=3, help='3D matching pooling stride for FIM')
         parser.add_argument('--click_predictor', type=str, default='dot_product', choices=['dot_product', 'mlp', 'sigmoid', 'FIM'], help='Click predictor')
-
+        
         self.attribute_dict = dict(vars(parser.parse_args()))
         for attribute in self.attribute_dict:
             setattr(self, attribute, self.attribute_dict[attribute])
         # self.head_dim = (self.intent_embedding_dim * 2 + self.category_embedding_dim + self.subCategory_embedding_dim) // self.head_num
 
-        # for wandb config
-        # self.lr = w_lr
-        # self.dropout_rate = w_dropout_rate
-        # self.intent_num = w_intent_num
-        # self.intent_embedding_dim = w_intent_embedding_dim
-        # self.isab_num_inds = w_isab_num_inds
-        # self.isab_num_heads = w_isab_num_heads
         
         if self.dataset in ['mind']:  
             # for MIND
             self.train_root = '../MIND-small/train'
             self.dev_root = '../MIND-small/dev'
             self.test_root = '../MIND-small/test'
-            self.max_history_num = 30
-        elif self.dataset in ['adressa2']:
-            # for Adressa2 (adopt)
-            self.train_root = '../Adressa-sample/train'
-            self.dev_root = '../Adressa-sample/dev'
-            self.test_root = '../Adressa-sample/test'
-            self.max_history_num = 40
-        else:
-            # for Adressa (test)
-            self.train_root = '../Adressa-small/train'
-            self.dev_root = '../Adressa-small/dev'
-            self.test_root = '../Adressa-small/test'
-            self.max_history_num = 40
+            self.max_history_num = 50
+        elif self.dataset in ['adressa']:
+            # for Adressa
+            self.train_root = '../Adressa-lifetimev3/train'
+            self.dev_root = '../.Adressa-lifetimev3/dev'
+            self.test_root = '../Adressa-lifetimev3/test'
+            self.max_history_num = 50
 
         if self.dataset in ['mind']:
-            self.gcn_layer_num = 3
-            self.epoch = 10
-            self.dropout_rate = 0.25
-            self.device_id = 0
-            self.batch_size = 16
-            self.max_abstract_length = 64
+            self.gcn_layer_num = 5
+            self.epoch = 16
+            self.intent_embedding_dim = 400
+            self.dropout_rate = 0.2
+            self.batch_size = 32
+            self.max_abstract_length = 128
             self.early_stopping_epoch = 4
-        elif self.dataset in ['adressa', 'adressa2']:
-            # self.dropout_rate = 0.2
+        elif self.dataset in ['adressa']:
             self.gcn_layer_num = 4
+            self.intent_embedding_dim = 400
+            self.epoch = 5
+            self.dropout_rate = 0.25
+            self.max_abstract_length = 128
+            self.batch_size =32
         else: 
             self.dropout_rate = 0.2
             self.gcn_layer_num = 4
             self.epoch = 16
-        # for wandb sweep ('mind-find-best')
-        # if self.intent_embedding_dim in [50, 100]:
-        #     self.device_id = 0
-        # elif self.intent_embedding_dim in [200, 400]:
-        #     self.device_id = 1
+
         self.seed = self.seed if self.seed >= 0 else (int)(time.time())
         self.attribute_dict['dropout_rate'] = self.dropout_rate
         self.attribute_dict['gcn_layer_num'] = self.gcn_layer_num
         self.attribute_dict['epoch'] = self.epoch
+        self.attribute_dict['intent_embedding_dim'] = self.intent_embedding_dim
+        self.attribute_dict['batch_size'] = self.batch_size
+        self.attribute_dict['max_abstract_length'] = self.max_abstract_length
+        self.attribute_dict['early_stopping_epoch'] = self.early_stopping_epoch
+        self.attribute_dict['max_history_num'] = self.max_history_num
         self.attribute_dict['seed'] = self.seed
         if self.config_file != '':
             if os.path.exists(self.config_file):
@@ -176,7 +163,7 @@ class Config:
 
 
     def preliminary_setup(self):
-        if self.dataset in ['adressa', 'adressa2']:
+        if self.dataset in ['adressa']:
             dataset_files = [
                 self.train_root + '/news.tsv', self.train_root + '/behaviors.tsv', 
                 self.dev_root + '/news.tsv', self.dev_root + '/behaviors.tsv', 
@@ -189,7 +176,7 @@ class Config:
                 self.test_root + '/news.tsv', self.test_root + '/behaviors.tsv', self.test_root + '/entity_embedding.vec', self.test_root + '/context_embedding.vec'
             ]
         if not all(list(map(os.path.exists, dataset_files))):
-            if self.dataset in ['adressa', 'adressa2']:
+            if self.dataset in ['adressa']:
                 preprocess_Adressa()
             else:
                 prepare_function = getattr(self, 'prepare_MIND_%s' % self.dataset, None)
@@ -216,7 +203,7 @@ class Config:
             with open(os.path.join(self.dev_root, 'behaviors.tsv'), 'r', encoding='utf-8') as dev_f:
                 with open('dev/ref/truth-%s.txt' % self.dataset, 'w', encoding='utf-8') as truth_f:
                     for dev_ID, line in enumerate(dev_f):
-                        impression_ID, user_ID, time, history, impressions = line.split('\t')
+                        impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
                         labels = [int(impression[-1]) for impression in impressions.strip().split(' ')]
                         truth_f.write(('' if dev_ID == 0 else '\n') + str(dev_ID + 1) + ' ' + str(labels).replace(' ', ''))
         if self.dataset != 'large':
@@ -224,7 +211,7 @@ class Config:
                 with open(os.path.join(self.test_root, 'behaviors.tsv'), 'r', encoding='utf-8') as test_f:
                     with open('test/ref/truth-%s.txt' % self.dataset, 'w', encoding='utf-8') as truth_f:
                         for test_ID, line in enumerate(test_f):
-                            impression_ID, user_ID, time, history, impressions = line.split('\t')
+                            impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
                             labels = [int(impression[-1]) for impression in impressions.strip().split(' ')]
                             truth_f.write(('' if test_ID == 0 else '\n') + str(test_ID + 1) + ' ' + str(labels).replace(' ', ''))
         else:
