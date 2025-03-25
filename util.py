@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*- 
 import os
 import torch
+from torch import Tensor
 import torch.nn as nn
 from corpus import Corpus
 from dataset import DevTest_Dataset
