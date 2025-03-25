@@ -6,7 +6,7 @@ import collections
 import re
 from nltk.tokenize import word_tokenize
 # import torchtext
-# print(torchtext.__version__)
+# torchtext.disable_torchtext_deprecation_warning()
 from torchtext.vocab import GloVe
 from config import Config
 import torch
@@ -31,16 +31,18 @@ class Corpus:
         word_embedding_file = 'word_embedding-' + str(config.word_threshold) + '-' + str(config.word_embedding_dim) + '-' + config.tokenizer + '-' + str(config.max_title_length) + '-' + str(config.max_abstract_length) + '-' + config.dataset + '.pkl'
         user_history_graph_file_raw = 'user_history_graph-' + str(config.max_history_num) + ('' if config.no_self_connection else '-self') + ('' if config.no_adjacent_normalization else '-normalize-' + config.gcn_normalization_type) + '-' + config.dataset + '.pkl'+'.gz'
         user_history_graph_file_train = 'user_history_graph-' + str(config.max_history_num) + ('' if config.no_self_connection else '-self') + ('' if config.no_adjacent_normalization else '-normalize-' + config.gcn_normalization_type) + '-' + config.dataset + '_train.pkl'+'.gz'
+        user_history_graph_file_test = 'user_history_graph-' + str(config.max_history_num) + ('' if config.no_self_connection else '-self') + ('' if config.no_adjacent_normalization else '-normalize-' + config.gcn_normalization_type) + '-' + config.dataset + '_test.pkl'+'.gz'
+        user_history_graph_file_dev = 'user_history_graph-' + str(config.max_history_num) + ('' if config.no_self_connection else '-self') + ('' if config.no_adjacent_normalization else '-normalize-' + config.gcn_normalization_type) + '-' + config.dataset + '_dev.pkl'+'.gz'
         
         if config.dataset in ['mind']:
             # for MIND
             entity_file = 'entity-%s.json' % config.dataset
             entity_embedding_file = 'entity_embedding-%s.pkl' % config.dataset
             context_embedding_file = 'context_embedding-%s.pkl' % config.dataset
-            preprocessed_data_files = [user_ID_file, news_ID_file, category_file, subCategory_file, vocabulary_file, word_embedding_file, entity_file, entity_embedding_file, context_embedding_file, user_history_graph_file_train]
+            preprocessed_data_files = [user_ID_file, news_ID_file, category_file, subCategory_file, vocabulary_file, word_embedding_file, entity_file, entity_embedding_file, context_embedding_file, user_history_graph_file_train, user_history_graph_file_test, user_history_graph_file_dev]
         else:
             # for Adressa (not include entity_file, entity_embedding_file, context_embedding_file)
-            preprocessed_data_files = [user_ID_file, news_ID_file, category_file, subCategory_file, vocabulary_file, word_embedding_file, user_history_graph_file_train]
+            preprocessed_data_files = [user_ID_file, news_ID_file, category_file, subCategory_file, vocabulary_file, word_embedding_file, user_history_graph_file_train, user_history_graph_file_test, user_history_graph_file_dev]
 
         if not all(list(map(os.path.exists, preprocessed_data_files))):
             user_ID_dict = {'<UNK>': 0}
@@ -55,7 +57,7 @@ class Corpus:
             # 1. user ID dictionay
             with open(os.path.join(config.train_root, 'behaviors.tsv'), 'r', encoding='utf-8') as train_behaviors_f:
                 for line in train_behaviors_f:
-                    impression_ID, user_ID, time, history, impressions = line.split('\t')
+                    impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
                     if user_ID not in user_ID_dict:
                         user_ID_dict[user_ID] = len(user_ID_dict)
                 with open(user_ID_file, 'w', encoding='utf-8') as user_ID_f:
@@ -113,10 +115,9 @@ class Corpus:
                 for i, prefix in enumerate([config.train_root, config.dev_root, config.test_root]):
                     with open(os.path.join(prefix, 'news.tsv'), 'r', encoding='utf-8') as news_f:
                         for line in news_f:
-                            # print(len(line.split('\t')))
                             if len(line.split('\t')) != 8:
                                 continue
-                            news_ID, category, subCategory, title, body, _, _, _ = line.split('\t')
+                            news_ID, category, subCategory, title, body, publishTime, _, _ = line.split('\t')
                             if news_ID not in news_ID_dict:
                                 news_ID_dict[news_ID] = len(news_ID_dict)
                                 if category not in category_dict:
@@ -143,14 +144,6 @@ class Corpus:
                                         else:
                                             if word in word_counter: # already appeared in training set
                                                 word_counter[word] += 1
-                                # for entity in json.loads(title_entities):
-                                #     WikidataId = entity['WikidataId']
-                                #     if WikidataId not in entity_dict:
-                                #         entity_dict[WikidataId] = len(entity_dict)
-                                # for entity in json.loads(abstract_entities):
-                                #     WikidataId = entity['WikidataId']
-                                #     if WikidataId not in entity_dict:
-                                #         entity_dict[WikidataId] = len(entity_dict)
                             news_category_dict[news_ID] = category_dict[category]
                 with open(news_ID_file, 'w', encoding='utf-8') as news_ID_f:
                     json.dump(news_ID_dict, news_ID_f)
@@ -170,9 +163,9 @@ class Corpus:
 
             # 4. Glove word embedding
             if config.word_embedding_dim == 300:
-                glove = GloVe(name='840B', dim=300, cache='../glove', max_vectors=10000000000)
+                glove = GloVe(name='840B', dim=300, cache='../../glove', max_vectors=10000000000)
             else:
-                glove = GloVe(name='6B', dim=config.word_embedding_dim, cache='../glove', max_vectors=10000000000)
+                glove = GloVe(name='6B', dim=config.word_embedding_dim, cache='../../glove', max_vectors=10000000000)
             glove_stoi = glove.stoi
             glove_vectors = glove.vectors
             glove_mean_vector = torch.mean(glove_vectors, dim=0, keepdim=False)
@@ -236,7 +229,7 @@ class Corpus:
                 with open(os.path.join(prefix, 'behaviors.tsv'), 'r', encoding='utf-8') as behaviors_f:
                     user_history_graph_data = {}
                     for line_index, line in enumerate(behaviors_f):
-                        impression_ID, user_ID, time, history, impressions = line.split('\t')
+                        impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
                         if config.no_self_connection:
                             history_graph = np.zeros([graph_size, graph_size], dtype=np.float32)
                         else:
@@ -351,25 +344,25 @@ class Corpus:
         news_lines = []
         with open(os.path.join(config.train_root, 'news.tsv'), 'r', encoding='utf-8') as train_news_f:
             for line in train_news_f:
-                news_ID, category, subCategory, title, abstract, _, title_entities, abstract_entities = line.split('\t')
+                news_ID, category, subCategory, title, abstract, publishTime, title_entities, abstract_entities = line.split('\t')
                 if news_ID not in news_ID_set:
                     news_lines.append(line)
                     news_ID_set.add(news_ID)
         with open(os.path.join(config.dev_root, 'news.tsv'), 'r', encoding='utf-8') as dev_news_f:
             for line in dev_news_f:
-                news_ID, category, subCategory, title, abstract, _, title_entities, abstract_entities = line.split('\t')
+                news_ID, category, subCategory, title, abstract, publishTime, title_entities, abstract_entities = line.split('\t')
                 if news_ID not in news_ID_set:
                     news_lines.append(line)
                     news_ID_set.add(news_ID)
         with open(os.path.join(config.test_root, 'news.tsv'), 'r', encoding='utf-8') as test_news_f:
             for line in test_news_f:
-                news_ID, category, subCategory, title, abstract, _, title_entities, abstract_entities = line.split('\t')
+                news_ID, category, subCategory, title, abstract, publishTime, title_entities, abstract_entities = line.split('\t')
                 if news_ID not in news_ID_set:
                     news_lines.append(line)
                     news_ID_set.add(news_ID)
         assert self.news_num == len(news_ID_set), 'news num mismatch %d v.s. %d' % (self.news_num, len(news_ID_set))
         for line in news_lines:
-            news_ID, category, subCategory, title, abstract, _, title_entities, abstract_entities = line.split('\t')
+            news_ID, category, subCategory, title, abstract, publishTime, title_entities, abstract_entities = line.split('\t')
             index = self.news_ID_dict[news_ID]
             self.news_category[index] = self.category_dict[category] if category in self.category_dict else 0
             self.news_subCategory[index] = self.subCategory_dict[subCategory] if subCategory in self.subCategory_dict else 0
@@ -429,7 +422,7 @@ class Corpus:
         # generate behavior meta data
         with open(os.path.join(config.train_root, 'behaviors.tsv'), 'r', encoding='utf-8') as train_behaviors_f:
             for behavior_index, line in enumerate(train_behaviors_f):
-                impression_ID, user_ID, time, history, impressions = line.split('\t')
+                impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
                 click_impressions = []
                 non_click_impressions = []
                 for impression in impressions.strip().split(' '):
@@ -450,7 +443,7 @@ class Corpus:
                         self.train_behaviors.append([self.user_ID_dict[user_ID], [0 for _ in range(self.max_history_num)], np.zeros([self.max_history_num], dtype=bool), click_impression, non_click_impressions, behavior_index])
         with open(os.path.join(config.dev_root, 'behaviors.tsv'), 'r', encoding='utf-8') as dev_behaviors_f:
             for dev_ID, line in enumerate(dev_behaviors_f):
-                impression_ID, user_ID, time, history, impressions = line.split('\t')
+                impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
                 if len(history) != 0:
                     history = list(map(lambda x: self.news_ID_dict[x], history.strip().split(' ')))
                     padding_num = max(0, self.max_history_num - len(history))
@@ -466,7 +459,7 @@ class Corpus:
                         self.dev_behaviors.append([self.user_ID_dict[user_ID] if user_ID in self.user_ID_dict else 0, [0 for _ in range(self.max_history_num)], np.zeros([self.max_history_num], dtype=bool), self.news_ID_dict[impression[:-2]], dev_ID])
         with open(os.path.join(config.test_root, 'behaviors.tsv'), 'r', encoding='utf-8') as test_behaviors_f:
             for test_ID, line in enumerate(test_behaviors_f):
-                impression_ID, user_ID, time, history, impressions = line.split('\t')
+                impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
                 if len(history) != 0:
                     history = list(map(lambda x: self.news_ID_dict[x], history.strip().split(' ')))
                     padding_num = max(0, self.max_history_num - len(history))
