@@ -15,7 +15,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-# import wandb
 
 
 class Trainer:
@@ -76,7 +75,6 @@ class Trainer:
 
     def train(self):
         model = self.model
-        # wandb.watch(model, log='all')
         for e in tqdm(range(1, self.epoch + 1)):
             self.train_dataset.negative_sampling()
             train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.batch_size // 16, pin_memory=True)
@@ -126,7 +124,7 @@ class Trainer:
             print('loss =', epoch_loss / len(self.train_dataset))
             
             # validation
-            auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size * 3 // 2, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset)
+            auc, mrr, ndcg5, ndcg10 = compute_scores(model, self._corpus, self.batch_size, 'dev', self.dev_res_dir + '/' + model.model_name + '-' + str(e) + '.txt', self._dataset)
             self.auc_results.append(auc)
             self.mrr_results.append(mrr)
             self.ndcg5_results.append(ndcg5)
@@ -134,10 +132,9 @@ class Trainer:
             print('Epoch %d : dev done\nDev criterions' % e)
             print('AUC = {:.4f}\nMRR = {:.4f}\nnDCG@5 = {:.4f}\nnDCG@10 = {:.4f}'.format(auc, mrr, ndcg5, ndcg10))
             
-            # wandb.log({'valid_auc': auc, 'valid_mrr': mrr, 'valid_ndcg5': ndcg5, 'valid_ndcg10': ndcg10}, step=e)
             
             if self.dev_criterion == 'auc':
-                self.scheduler.step(auc)
+                # self.scheduler.step(auc)
                 if auc >= self.best_dev_auc:
                     self.best_dev_auc = auc
                     self.best_dev_epoch = e
@@ -148,7 +145,7 @@ class Trainer:
                     
                     self.epoch_not_increase += 1
             elif self.dev_criterion == 'mrr':
-                self.scheduler.step(mrr)
+                # self.scheduler.step(mrr)
                 if mrr >= self.best_dev_mrr:
                     self.best_dev_mrr = mrr
                     self.best_dev_epoch = e
@@ -158,7 +155,7 @@ class Trainer:
                 else:
                     self.epoch_not_increase += 1
             elif self.dev_criterion == 'ndcg5':
-                self.scheduler.step(ndcg5)
+                # self.scheduler.step(ndcg5)
                 if ndcg5 >= self.best_dev_ndcg5:
                     self.best_dev_ndcg5 = ndcg5
                     self.best_dev_epoch = e
@@ -168,7 +165,7 @@ class Trainer:
                 else:
                     self.epoch_not_increase += 1
             elif self.dev_criterion == 'ndcg10':
-                self.scheduler.step(ndcg10)
+                # self.scheduler.step(ndcg10)
                 if ndcg10 >= self.best_dev_ndcg10:
                     self.best_dev_ndcg10 = ndcg10
                     self.best_dev_epoch = e
@@ -179,7 +176,7 @@ class Trainer:
                     self.epoch_not_increase += 1
             else:
                 avg = AvgMetric(auc, mrr, ndcg5, ndcg10)
-                self.scheduler.step(avg)
+                # self.scheduler.step(avg)
                 if avg >= self.best_dev_avg:
                     self.best_dev_avg = avg
                     self.best_dev_epoch = e
