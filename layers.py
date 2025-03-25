@@ -97,6 +97,7 @@ class Conv2D_Pool(nn.Module):
             conv4_relu_pool, _ = torch.max(conv4_relu[:, :, :length - 3], dim=2, keepdim=False)
             return torch.cat([conv1_relu_pool, conv2_relu_pool, conv3_relu_pool, conv4_relu_pool], dim=1)
 
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, h, d_model, len_q, len_k, d_k, d_v):
         super(MultiHeadAttention, self).__init__()
@@ -191,18 +192,12 @@ class Attention(nn.Module):
     # Output
     # out     : [batch_size, feature_dim]
     def forward(self, feature, mask=None):
-        # 입력된 feature 텐서를 nn.Linear 레이어를 통과시켜 attention_dim 차원으로 변환하고, 
-        # 이를 tanh 함수에 적용하여 어텐션 벡터 계산
         attention = torch.tanh(self.affine1(feature))                                 # [batch_size, length, attention_dim]
-        # 또 다른 nn.Linear 레이어를 사용하여 어텐션 스코어 값 계산
         a = self.affine2(attention).squeeze(dim=2)                                    # [batch_size, length]
-        # 마스크가 주어지면 어텐션 스코어를 마스크 처리하고, 
-        # 소프트맥스 함수를 적용하여 어텐션 가중치를 계산
         if mask is not None:
             alpha = F.softmax(a.masked_fill(mask == 0, -1e9), dim=1).unsqueeze(dim=1) # [batch_size, 1, length]
         else:
             alpha = F.softmax(a, dim=1).unsqueeze(dim=1)                              # [batch_size, 1, length]
-        # final: 어텐션 가중치를 사용하여 입력된 특성 텐서를 가중합하여 결과 계산
         out = torch.bmm(alpha, feature).squeeze(dim=1)                                # [batch_size, feature_dim]
         return out
 
@@ -234,8 +229,6 @@ class ScaledDotProduct_CandidateAttention(nn.Module):
         out = torch.bmm(alpha.unsqueeze(dim=1), feature).squeeze(dim=1)                                       # [batch_size, feature_dim]
         return out
 
-# 주어진 feature와 query 간의 어텐션(attention)을 계산하는 모듈을 정의
-# 특정 쿼리(query)에 대해 입력 피쳐(feature) 중에서 중요한 부분에 가중치를 부여 > 중요도에 따라 가중합을 계산
 class CandidateAttention(nn.Module):
     def __init__(self, feature_dim, query_dim, attention_dim):
         super(CandidateAttention, self).__init__()
@@ -262,9 +255,6 @@ class CandidateAttention(nn.Module):
             alpha = F.softmax(a.masked_fill(mask == 0, -1e9), dim=1)                                                                   # [batch_size, feature_num]
         else:
             alpha = F.softmax(a, dim=1)                                                                                                # [batch_size, feature_num]
-        # alpha의 모든 배치([batch_size, 1, feature_num])에 대해 각각의 feature 벡터에 어텐션 가중치를 곱한 값을 계산
-        # squeeze(dim=1)로 차원 축소([batch_size, feature_dim])
-        # 어텐션 가중치를 기반으로 입력 feature와의 가중합을 계산하여 어텐션 결과를 반환
         out = torch.bmm(alpha.unsqueeze(dim=1), feature).squeeze(dim=1)                                                                # [batch_size, feature_dim]
         return out
 
