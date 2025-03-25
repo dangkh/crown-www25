@@ -10,13 +10,11 @@ def dcg_score(y_true, y_score, k=10):
     gains = 2 ** y_true - 1
     discounts = np.log2(np.arange(len(y_true)) + 2)
     return np.sum(gains / discounts)
-    
 
 def ndcg_score(y_true, y_score, k=10):
     best = dcg_score(y_true, y_true, k)
     actual = dcg_score(y_true, y_score, k)
     return actual / best
-
 
 def mrr_score(y_true, y_score):
     order = np.argsort(y_score)[::-1]
