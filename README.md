@@ -1,7 +1,7 @@
 # [WWW'25] CROWN: A Novel Approach to Comprehending Users' Preferences for Accurate Personalized News Recommendation
 
 ## The overview of CROWN
-![The overview of CROWN](./assets/overview.PNG)
+![The overview of CROWN](./assets/CROWN_overview.PNG)
 
 ## Available dataset
 1. [MIND Dataset](https://msnews.github.io/)
