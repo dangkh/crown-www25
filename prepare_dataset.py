@@ -10,7 +10,7 @@ np.random.seed(0)
 MIND_small_dataset_root = '../MIND-small'
 MIND_large_dataset_root = '../MIND-large'
 MIND_200k_dataset_root = '../MIND-200k'
-Adressa_dataset_root = '../Adressa-sample'
+Adressa_dataset_root = '../Adressa'
 
 def download_extract_MIND_small():
     if not os.path.exists(MIND_small_dataset_root):
