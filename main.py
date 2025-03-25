@@ -36,9 +36,8 @@ def train(config, corpus):
     gc.collect()
     torch.cuda.empty_cache()
 
-# function: 모델 검증
 def dev(config, corpus):
-    model = Model(config) # 모델 지정
+    model = Model(config) 
     assert os.path.exists(config.dev_model_path), 'Dev model does not exist : ' + config.dev_model_path
     model.load_state_dict(torch.load(config.dev_model_path, map_location=torch.device('cpu'))[model.model_name])
     model.cuda()
@@ -50,9 +49,8 @@ def dev(config, corpus):
     print('AUC : %.4f\nMRR : %.4f\nnDCG@5 : %.4f\nnDCG@10 : %.4f' % (auc, mrr, ndcg5, ndcg10))
     return auc, mrr, ndcg5, ndcg10
 
-# function: 모델 테스트
 def test(config, corpus):
-    model = Model(config) # 모델 지정
+    model = Model(config) 
     assert os.path.exists(config.test_model_path), 'Test model does not exist : ' + config.test_model_path
     model.load_state_dict(torch.load(config.test_model_path, map_location=torch.device('cpu'))[model.model_name])
     model.cuda()
@@ -72,7 +70,6 @@ def test(config, corpus):
             f.write('#63' + '\t' + str(auc) + '\t' + str(mrr) + '\t' + str(ndcg5) + '\t' + str(ndcg10) + '\n')
 
 # main.py
-# function: 뉴스 추천 모델을 학습, 검증, 테스트
 if __name__ == '__main__':
     config = Config() # configuration
     data_corpus = Corpus(config) # load dataset corpus
@@ -81,6 +78,6 @@ if __name__ == '__main__':
         config.test_model_path = config.best_model_dir + '/#' + str(config.run_index) + '/' + config.news_encoder + '-' + config.user_encoder
         test(config, data_corpus)
     elif config.mode == 'test':
-        config.test_model_path = 'best_model/mind/CIDER-CIDER/#63/CIDER-CIDER'
-        config.test_output_file = 'results/mind/CIDER-CIDER/#63-test'
+        config.test_model_path = ''
+        config.test_output_file = ''
         test(config, data_corpus)
