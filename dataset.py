@@ -5,7 +5,6 @@ import torch.utils.data as data
 from numpy.random import randint
 from torch.utils.data import DataLoader
 
-
 class Train_Dataset(data.Dataset):
     def __init__(self, corpus: Corpus):
         self.negative_sample_num = corpus.negative_sample_num
@@ -128,7 +127,6 @@ class DevTest_Dataset(data.Dataset):
 
     def __len__(self):
         return self.num
-
 
 if __name__ == '__main__':
     start_time = time.time()
