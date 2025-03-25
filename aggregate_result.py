@@ -6,7 +6,9 @@ model_dict = {
     'CNN-LSTUR': 'LSTUR',
     'NAML-ATT': 'NAML',
     'MHSA-MHSA': 'NRMS',
-    'CNE-SUE': 'CNE-SUE'
+    'HDC-FIM': 'FIM',
+    'CNE-SUE': 'CNE-SUE',
+    'CROWN-CROWN': 'CROWN'
 }
 
 
