@@ -67,11 +67,9 @@ def process_news(adressa_news_path):
                     else:
                         news_category[id] = category_dict["value"][0]
                         news_subCategory[id] = category_dict["value"][1]
-                    # print(news_title, news_body, news_category, news_subCategory)
                     break
                 else: 
                     break
-    # print("len(news_title): ", len(news_title))
     nid2index = {k: v for k, v in zip(news_title.keys(), range(1, len(news_title) + 1))}
     return news_title, news_body, news_category, news_subCategory, nid2index
 
@@ -175,11 +173,6 @@ def process_users(adressa_user_path, news_title, nid2index):
 
     for file in adressa_user_path.iterdir():
         with open(file, "r") as f:
-            # for Adressa-small version
-            # lines = f.readlines()
-            # random.shuffle(lines)
-            # num_lines_to_use = len(lines) // 2
-            # for l in tqdm(lines[:num_lines_to_use]):
             for l in tqdm(f):
                 event_dict = json.loads(l.strip("\n"))
                 if "title" in event_dict:            
@@ -258,7 +251,6 @@ if __name__ == "__main__":
 
     train_lines = []
     test_lines = []
-    # 각 유저(uindex)에 대한 behaviors 정보 생성
     for uindex in tqdm(user_info):
         uinfo = user_info[uindex]
         click_news = uinfo.click_news
