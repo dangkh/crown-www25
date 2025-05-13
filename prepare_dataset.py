@@ -29,10 +29,10 @@ def download_extract_MIND_small():
         assert os.path.exists(MIND_small_dataset_root + '/download/MINDsmall_dev.zip'), 'Dev set zip not found'
         os.mkdir(MIND_small_dataset_root + '/download/dev')
         os.system('unzip %s/download/MINDsmall_dev.zip -d %s/download/dev' % (MIND_small_dataset_root, MIND_small_dataset_root))
-    if not os.path.exists(MIND_small_dataset_root + '/download/wikidata-graph'):
-        if not os.path.exists(MIND_small_dataset_root + '/download/wikidata-graph.zip'):
-            os.system('wget https://mind201910.blob.core.windows.net/knowledge-graph/wikidata-graph.zip -P %s/download' % MIND_small_dataset_root)
-        os.system('unzip %s/download/wikidata-graph.zip -d %s/download' % (MIND_small_dataset_root, MIND_small_dataset_root))
+    # if not os.path.exists(MIND_small_dataset_root + '/download/wikidata-graph'):
+    #     if not os.path.exists(MIND_small_dataset_root + '/download/wikidata-graph.zip'):
+    #         os.system('wget https://mind201910.blob.core.windows.net/knowledge-graph/wikidata-graph.zip -P %s/download' % MIND_small_dataset_root)
+    #     os.system('unzip %s/download/wikidata-graph.zip -d %s/download' % (MIND_small_dataset_root, MIND_small_dataset_root))
 
 
 def download_extract_MIND_large(mode):
@@ -265,7 +265,7 @@ def generate_knowledge_entity_embedding(data_mode):
 def prepare_MIND_small():
     download_extract_MIND_small()
     preprocess_MIND_small()
-    generate_knowledge_entity_embedding('small')
+    # generate_knowledge_entity_embedding('small')
 
 
 def prepare_MIND_large():
@@ -283,7 +283,7 @@ def prepare_Adressa():
     # generate_knowledge_entity_embedding('adressa')
 
 if __name__ == '__main__':
-    prepare_Adressa()
+    # prepare_Adressa()
     prepare_MIND_small()
-    prepare_MIND_large()
-    prepare_MIND_200k()
+    # prepare_MIND_large()
+    # prepare_MIND_200k()

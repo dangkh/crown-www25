@@ -7,7 +7,7 @@ from torch_geometric.nn import GraphSAGE, GCN
 from torch.nn.utils.rnn import pack_padded_sequence
 from layers import MultiHeadAttention, Attention, ScaledDotProduct_CandidateAttention, CandidateAttention, GCN_, Conv1D
 from newsEncoders import NewsEncoder
-from torch_scatter import scatter_sum, scatter_softmax # need to be installed by following `https://pytorch-scatter.readthedocs.io/en/latest`
+# from torch_scatter import scatter_sum, scatter_softmax # need to be installed by following `https://pytorch-scatter.readthedocs.io/en/latest`
 import numpy as np
 import pickle
 
@@ -170,8 +170,9 @@ class SUE(UserEncoder):
         K = self.intraCluster_K(gcn_feature).view([batch_news_num, self.max_history_num, self.attention_dim])                                           # [batch_size * news_num, max_history_num, attention_dim]
         Q = self.intraCluster_Q(candidate_news_representation).view([batch_news_num, self.attention_dim, 1])                                            # [batch_size * news_num, attention_dim, 1]
         a = torch.bmm(K, Q).view([batch_size, news_num, self.max_history_num]) / self.attention_scalar                                                  # [batch_size, news_num, max_history_num]
-        alpha_intra = scatter_softmax(a, user_history_category_indices, 2).unsqueeze(dim=3)                                                             # [batch_size, news_num, max_history_num, 1]
-        intra_cluster_feature = scatter_sum(alpha_intra * gcn_feature, user_history_category_indices, dim=2, dim_size=self.category_num)                # [batch_size, news_num, category_num, news_embedding_dim]
+        # alpha_intra = scatter_softmax(a, user_history_category_indices, 2).unsqueeze(dim=3)                                                             # [batch_size, news_num, max_history_num, 1]
+        # intra_cluster_feature = scatter_sum(alpha_intra * gcn_feature, user_history_category_indices, dim=2, dim_size=self.category_num)                # [batch_size, news_num, category_num, news_embedding_dim]
+        intra_cluster_feature = intra_cluster_attention_sum(a, gcn_feature, user_history_category_indices, category_num=self.category_num)
         # perform nonlinear transformation on intra-cluster features
         intra_cluster_feature = self.dropout(F.relu(self.clusterFeatureAffine(intra_cluster_feature), inplace=True) + intra_cluster_feature)            # [batch_size, news_num, category_num, news_embedding_dim]
         # 3. Inter-cluster attention
@@ -182,7 +183,47 @@ class SUE(UserEncoder):
         ).view([batch_size, news_num, self.news_embedding_dim])                                                                                         # [batch_size, news_num, news_embedding_dim]
         return inter_cluster_feature
 
+def intra_cluster_attention_sum(a, gcn_feature, user_history_category_indices, category_num):
+    """
+    Args:
+        a: Tensor of shape [B, N, H] – attention logits
+        gcn_feature: Tensor of shape [B, N, H, D]
+        user_history_category_indices: LongTensor of shape [B, N, H]
+        category_num: int – total number of categories
+        
+    Returns:
+        intra_cluster_feature: Tensor of shape [B, N, category_num, D]
+    """
+    B, N, H, D = gcn_feature.shape
+    C = category_num
 
+    alpha_intra = torch.zeros_like(a)
+
+    for b in range(B):
+        for n in range(N):
+            idx = user_history_category_indices[b, n]  # (H,)
+            scores = a[b, n]  # (H,)
+            for c in range(C):
+                mask = (idx == c)
+                if mask.any():
+                    scores_c = scores[mask]
+                    softmax_c = F.softmax(scores_c, dim=0)
+                    alpha_intra[b, n][mask] = softmax_c
+
+    alpha_intra = alpha_intra.unsqueeze(dim=3)  # [B, N, H, 1]
+    weighted_feature = alpha_intra * gcn_feature  # [B, N, H, D]
+
+    intra_cluster_feature = torch.zeros(B, N, C, D, device=gcn_feature.device)
+
+    for b in range(B):
+        for n in range(N):
+            idx = user_history_category_indices[b, n]  # (H,)
+            feat = weighted_feature[b, n]  # (H, D)
+            for c in range(C):
+                mask = (idx == c).unsqueeze(-1)  # (H, 1)
+                intra_cluster_feature[b, n, c] = (feat * mask.float()).sum(dim=0)
+
+    return intra_cluster_feature
 # LSTUR(Long Short-Term User Representations)
 class LSTUR(UserEncoder):
     def __init__(self, news_encoder, config):

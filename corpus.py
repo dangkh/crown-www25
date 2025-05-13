@@ -57,7 +57,7 @@ class Corpus:
             # 1. user ID dictionay
             with open(os.path.join(config.train_root, 'behaviors.tsv'), 'r', encoding='utf-8') as train_behaviors_f:
                 for line in train_behaviors_f:
-                    impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
+                    impression_ID, user_ID, time, history, impressions = line.split('\t')
                     if user_ID not in user_ID_dict:
                         user_ID_dict[user_ID] = len(user_ID_dict)
                 with open(user_ID_file, 'w', encoding='utf-8') as user_ID_f:
@@ -195,21 +195,21 @@ class Corpus:
                                 WikidataId = terms[0]
                                 if WikidataId in entity_dict:
                                     entity_embedding_vectors[entity_dict[WikidataId]] = torch.FloatTensor(list(map(float, terms[1:])))
-                for prefix in [config.train_root, config.dev_root, config.test_root]:
-                    with open(os.path.join(prefix, 'context_embedding.vec'), 'r', encoding='utf-8') as context_f:
-                        for line in context_f:
-                            if len(line.strip()) > 0:
-                                terms = line.strip().split('\t')
-                                assert len(terms) == config.context_embedding_dim + 1, 'context embedding dim does not match'
-                                WikidataId = terms[0]
-                                if WikidataId in entity_dict:
-                                    context_embedding_vectors[entity_dict[WikidataId]] = torch.FloatTensor(list(map(float, terms[1:])))
+                # for prefix in [config.train_root, config.dev_root, config.test_root]:
+                #     with open(os.path.join(prefix, 'context_embedding.vec'), 'r', encoding='utf-8') as context_f:
+                #         for line in context_f:
+                #             if len(line.strip()) > 0:
+                #                 terms = line.strip().split('\t')
+                #                 assert len(terms) == config.context_embedding_dim + 1, 'context embedding dim does not match'
+                #                 WikidataId = terms[0]
+                #                 if WikidataId in entity_dict:
+                #                     context_embedding_vectors[entity_dict[WikidataId]] = torch.FloatTensor(list(map(float, terms[1:])))
                 with open(entity_file, 'w', encoding='utf-8') as entity_f:
                     json.dump(entity_dict, entity_f)
                 with open(entity_embedding_file, 'wb') as entity_embedding_f:
                     pickle.dump(entity_embedding_vectors, entity_embedding_f)
-                with open(context_embedding_file, 'wb') as context_embedding_f:
-                    pickle.dump(context_embedding_vectors, context_embedding_f)
+                # with open(context_embedding_file, 'wb') as context_embedding_f:
+                #     pickle.dump(context_embedding_vectors, context_embedding_f)
             
             # 6. user history graph
             category_num = len(category_dict)
@@ -229,7 +229,7 @@ class Corpus:
                 with open(os.path.join(prefix, 'behaviors.tsv'), 'r', encoding='utf-8') as behaviors_f:
                     user_history_graph_data = {}
                     for line_index, line in enumerate(behaviors_f):
-                        impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
+                        impression_ID, user_ID, time, history, impressions = line.split('\t')
                         if config.no_self_connection:
                             history_graph = np.zeros([graph_size, graph_size], dtype=np.float32)
                         else:
@@ -422,7 +422,7 @@ class Corpus:
         # generate behavior meta data
         with open(os.path.join(config.train_root, 'behaviors.tsv'), 'r', encoding='utf-8') as train_behaviors_f:
             for behavior_index, line in enumerate(train_behaviors_f):
-                impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
+                impression_ID, user_ID, time, history, impressions = line.split('\t')
                 click_impressions = []
                 non_click_impressions = []
                 for impression in impressions.strip().split(' '):
@@ -443,7 +443,7 @@ class Corpus:
                         self.train_behaviors.append([self.user_ID_dict[user_ID], [0 for _ in range(self.max_history_num)], np.zeros([self.max_history_num], dtype=bool), click_impression, non_click_impressions, behavior_index])
         with open(os.path.join(config.dev_root, 'behaviors.tsv'), 'r', encoding='utf-8') as dev_behaviors_f:
             for dev_ID, line in enumerate(dev_behaviors_f):
-                impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
+                impression_ID, user_ID, time, history, impressions = line.split('\t')
                 if len(history) != 0:
                     history = list(map(lambda x: self.news_ID_dict[x], history.strip().split(' ')))
                     padding_num = max(0, self.max_history_num - len(history))
@@ -459,7 +459,7 @@ class Corpus:
                         self.dev_behaviors.append([self.user_ID_dict[user_ID] if user_ID in self.user_ID_dict else 0, [0 for _ in range(self.max_history_num)], np.zeros([self.max_history_num], dtype=bool), self.news_ID_dict[impression[:-2]], dev_ID])
         with open(os.path.join(config.test_root, 'behaviors.tsv'), 'r', encoding='utf-8') as test_behaviors_f:
             for test_ID, line in enumerate(test_behaviors_f):
-                impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
+                impression_ID, user_ID, time, history, impressions = line.split('\t')
                 if len(history) != 0:
                     history = list(map(lambda x: self.news_ID_dict[x], history.strip().split(' ')))
                     padding_num = max(0, self.max_history_num - len(history))
