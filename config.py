@@ -203,7 +203,7 @@ class Config:
             with open(os.path.join(self.dev_root, 'behaviors.tsv'), 'r', encoding='utf-8') as dev_f:
                 with open('dev/ref/truth-%s.txt' % self.dataset, 'w', encoding='utf-8') as truth_f:
                     for dev_ID, line in enumerate(dev_f):
-                        impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
+                        impression_ID, user_ID, time, history, impressions = line.split('\t')
                         labels = [int(impression[-1]) for impression in impressions.strip().split(' ')]
                         truth_f.write(('' if dev_ID == 0 else '\n') + str(dev_ID + 1) + ' ' + str(labels).replace(' ', ''))
         if self.dataset != 'large':
@@ -211,7 +211,7 @@ class Config:
                 with open(os.path.join(self.test_root, 'behaviors.tsv'), 'r', encoding='utf-8') as test_f:
                     with open('test/ref/truth-%s.txt' % self.dataset, 'w', encoding='utf-8') as truth_f:
                         for test_ID, line in enumerate(test_f):
-                            impression_ID, user_ID, time, history, impressions, user_topic_lifetime = line.split('\t')
+                            impression_ID, user_ID, time, history, impressions = line.split('\t')
                             labels = [int(impression[-1]) for impression in impressions.strip().split(' ')]
                             truth_f.write(('' if test_ID == 0 else '\n') + str(test_ID + 1) + ' ' + str(labels).replace(' ', ''))
         else:
