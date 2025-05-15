@@ -94,9 +94,9 @@ class Config:
             self.max_history_num = 50
         elif self.dataset in ['adressa']:
             # for Adressa
-            self.train_root = '../Adressa-lifetimev3/train'
-            self.dev_root = '../.Adressa-lifetimev3/dev'
-            self.test_root = '../Adressa-lifetimev3/test'
+            self.train_root = '../Adressa/train'
+            self.dev_root = '../.Adressa/dev'
+            self.test_root = '../Adressa/test'
             self.max_history_num = 50
 
         if self.dataset in ['mind']:
