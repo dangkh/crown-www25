@@ -22,7 +22,7 @@ class Config:
         parser.add_argument('--seed', type=int, default=0, help='Seed for random number generator')
         parser.add_argument('--config_file', type=str, default='', help='Config file path')
         # Dataset config
-        parser.add_argument('--dataset', type=str, default='mind', choices=['mind', 'adressa'], help='Dataset type')
+        parser.add_argument('--dataset', type=str, default='adressa', choices=['mind', 'adressa'], help='Dataset type')
         parser.add_argument('--tokenizer', type=str, default='MIND', choices=['MIND', 'NLTK'], help='Sentence tokenizer')
         parser.add_argument('--word_threshold', type=int, default=3, help='Word threshold')
         parser.add_argument('--max_title_length', type=int, default=32, help='Sentence truncate length for title')
@@ -95,7 +95,7 @@ class Config:
         elif self.dataset in ['adressa']:
             # for Adressa
             self.train_root = '../Adressa/train'
-            self.dev_root = '../.Adressa/dev'
+            self.dev_root = '../Adressa/dev'
             self.test_root = '../Adressa/test'
             self.max_history_num = 50
 
