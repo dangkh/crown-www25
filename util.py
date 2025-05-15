@@ -7,7 +7,7 @@ from corpus import Corpus
 from dataset import DevTest_Dataset
 from torch.utils.data import DataLoader
 from evaluate import scoring
-
+from tqdm import tqdm
 
 def compute_scores(model, corpus, batch_size, mode, result_file, dataset):
     assert mode in ['dev', 'test'], 'mode must be chosen from \'dev\' or \'test\''

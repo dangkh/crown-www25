@@ -112,12 +112,18 @@ class Corpus:
                     json.dump(subCategory_dict, subCategory_f)
             # for Adressa
             else:
+                with open("../translate_title_norwegian.json", 'r') as f:
+                    dataTitle = json.load(f)
                 for i, prefix in enumerate([config.train_root, config.dev_root, config.test_root]):
                     with open(os.path.join(prefix, 'news.tsv'), 'r', encoding='utf-8') as news_f:
                         for line in news_f:
                             if len(line.split('\t')) != 8:
                                 continue
                             news_ID, category, subCategory, title, body, publishTime, _, _ = line.split('\t')
+                            print(news_ID)
+                            print(title)
+                            print(str(news_ID))
+                            stop
                             if news_ID not in news_ID_dict:
                                 news_ID_dict[news_ID] = len(news_ID_dict)
                                 if category not in category_dict:
