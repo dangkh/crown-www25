@@ -120,10 +120,7 @@ class Corpus:
                             if len(line.split('\t')) != 8:
                                 continue
                             news_ID, category, subCategory, title, body, publishTime, _, _ = line.split('\t')
-                            print(news_ID)
-                            print(title)
-                            print(str(news_ID))
-                            stop
+                            title = dataTitle[str(news_ID)]
                             if news_ID not in news_ID_dict:
                                 news_ID_dict[news_ID] = len(news_ID_dict)
                                 if category not in category_dict:
