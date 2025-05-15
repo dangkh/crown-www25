@@ -75,13 +75,13 @@ class Trainer:
 
     def train(self):
         model = self.model
-        for e in tqdm(range(1, self.epoch + 1)):
+        for e in range(1, self.epoch + 1):
             self.train_dataset.negative_sampling()
-            train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0, pin_memory=True)
+            train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
             model.train()
             epoch_loss = 0
             for (user_ID, user_category, user_subCategory, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, \
-                news_category, news_subCategory, news_title_text, news_title_mask, news_title_entity, news_content_text, news_content_mask, news_content_entity) in train_dataloader:
+                news_category, news_subCategory, news_title_text, news_title_mask, news_title_entity, news_content_text, news_content_mask, news_content_entity) in tqdm(train_dataloader):
                 user_ID = user_ID.cuda(non_blocking=True)                                                                                                                       # [batch_size]
                 user_category = user_category.cuda(non_blocking=True)                                                                                                           # [batch_size, max_history_num]
                 user_subCategory = user_subCategory.cuda(non_blocking=True)                                                                                                     # [batch_size, max_history_num]
@@ -265,7 +265,7 @@ def distributed_train(rank, model: nn.Module, config: Config, corpus: Corpus, ru
         train_dataset.negative_sampling(rank=rank)
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True)
         train_sampler.set_epoch(e)
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, pin_memory=True, sampler=train_sampler)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=4, pin_memory=True, sampler=train_sampler)
         model.train()
         epoch_loss = 0
         for (user_ID, user_category, user_subCategory, user_title_text, user_title_mask, user_title_entity, user_content_text, user_content_mask, user_content_entity, user_history_mask, user_history_graph, user_history_category_mask, user_history_category_indices, \

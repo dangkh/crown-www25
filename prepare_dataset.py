@@ -223,49 +223,49 @@ def generate_knowledge_entity_embedding(data_mode):
         if not os.path.exists('../MIND-large/test/entity_embedding.vec'):
             shutil.copyfile('../MIND-large/download/test/entity_embedding.vec', '../MIND-large/test/entity_embedding.vec')
     # 2. generate context embedding file
-    entity_embeddings = {}
-    entity_embedding_files = ['../MIND-%s/%s/entity_embedding.vec' % (data_mode, mode) for mode in ['train', 'dev', 'test']]
-    for entity_embedding_file in entity_embedding_files:
-        with open(entity_embedding_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                if len(line.strip()) > 0:
-                    terms = line.strip().split('\t')
-                    assert len(terms) == 101
-                    entity_embeddings[terms[0]] = list(map(float, terms[1:]))
-    entity_embedding_relation = collections.defaultdict(set)
-    with open('../MIND-%s/download/wikidata-graph/wikidata-graph.tsv' % data_mode, 'r', encoding='utf-8') as wikidata_graph_f:
-        for line in wikidata_graph_f:
-            if len(line.strip()) > 0:
-                terms = line.strip().split('\t')
-                entity_embedding_relation[terms[0]].add(terms[2])
-                entity_embedding_relation[terms[2]].add(terms[0])
-    context_embeddings = {}
-    for entity in entity_embeddings:
-        entity_embedding = entity_embeddings[entity]
-        context_embedding = [entity_embedding[i] for i in range(100)]
-        cnt = 1
-        for _entity in entity_embedding_relation[entity]:
-            if _entity in entity_embeddings:
-                embedding = entity_embeddings[_entity]
-                for i in range(100):
-                    context_embedding[i] += embedding[i]
-                cnt += 1
-        for i in range(100):
-            context_embedding[i] /= cnt
-        context_embeddings[entity] = context_embedding
-    for mode in ['train', 'dev', 'test']:
-        with open('../MIND-%s/%s/entity_embedding.vec' % (data_mode, mode), 'r', encoding='utf-8') as entity_embedding_f:
-            with open('../MIND-%s/%s/context_embedding.vec' % (data_mode, mode), 'w', encoding='utf-8') as context_embedding_f:
-                for line in entity_embedding_f:
-                    if len(line.strip()) > 0:
-                        entity = line.split('\t')[0]
-                        context_embedding_f.write(entity + '\t' + '\t'.join(list(map(str, context_embeddings[entity]))) + '\n')
+    # entity_embeddings = {}
+    # entity_embedding_files = ['../MIND-%s/%s/entity_embedding.vec' % (data_mode, mode) for mode in ['train', 'dev', 'test']]
+    # for entity_embedding_file in entity_embedding_files:
+    #     with open(entity_embedding_file, 'r', encoding='utf-8') as f:
+    #         for line in f:
+    #             if len(line.strip()) > 0:
+    #                 terms = line.strip().split('\t')
+    #                 assert len(terms) == 101
+    #                 entity_embeddings[terms[0]] = list(map(float, terms[1:]))
+    # entity_embedding_relation = collections.defaultdict(set)
+    # with open('../MIND-%s/download/wikidata-graph/wikidata-graph.tsv' % data_mode, 'r', encoding='utf-8') as wikidata_graph_f:
+    #     for line in wikidata_graph_f:
+    #         if len(line.strip()) > 0:
+    #             terms = line.strip().split('\t')
+    #             entity_embedding_relation[terms[0]].add(terms[2])
+    #             entity_embedding_relation[terms[2]].add(terms[0])
+    # context_embeddings = {}
+    # for entity in entity_embeddings:
+    #     entity_embedding = entity_embeddings[entity]
+    #     context_embedding = [entity_embedding[i] for i in range(100)]
+    #     cnt = 1
+    #     for _entity in entity_embedding_relation[entity]:
+    #         if _entity in entity_embeddings:
+    #             embedding = entity_embeddings[_entity]
+    #             for i in range(100):
+    #                 context_embedding[i] += embedding[i]
+    #             cnt += 1
+    #     for i in range(100):
+    #         context_embedding[i] /= cnt
+    #     context_embeddings[entity] = context_embedding
+    # for mode in ['train', 'dev', 'test']:
+    #     with open('../MIND-%s/%s/entity_embedding.vec' % (data_mode, mode), 'r', encoding='utf-8') as entity_embedding_f:
+    #         with open('../MIND-%s/%s/context_embedding.vec' % (data_mode, mode), 'w', encoding='utf-8') as context_embedding_f:
+    #             for line in entity_embedding_f:
+    #                 if len(line.strip()) > 0:
+    #                     entity = line.split('\t')[0]
+    #                     context_embedding_f.write(entity + '\t' + '\t'.join(list(map(str, context_embeddings[entity]))) + '\n')
 
 
 def prepare_MIND_small():
-    download_extract_MIND_small()
+    # download_extract_MIND_small()
     preprocess_MIND_small()
-    # generate_knowledge_entity_embedding('small')
+    generate_knowledge_entity_embedding('small')
 
 
 def prepare_MIND_large():
