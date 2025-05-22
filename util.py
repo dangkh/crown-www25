@@ -56,6 +56,10 @@ def compute_scores(model, corpus, batch_size, mode, result_file, dataset):
     sub_scores = [[] for _ in range(indices[-1] + 1)]
     for i, index in enumerate(indices):
         sub_scores[index].append([scores[i], len(sub_scores[index])])
+
+    print("*"*50)
+    print("FILE SAVED AT")
+    print(result_file)
     with open(result_file, 'w', encoding='utf-8') as result_f:
         for i, sub_score in enumerate(sub_scores):
             sub_score.sort(key=lambda x: x[0], reverse=True)
