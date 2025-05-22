@@ -101,7 +101,7 @@ class Config:
 
         if self.dataset in ['mind']:
             self.gcn_layer_num = 5
-            self.epoch = 16
+            self.epoch = 3
             self.intent_embedding_dim = 400
             self.dropout_rate = 0.2
             self.batch_size = 32
@@ -110,7 +110,7 @@ class Config:
         elif self.dataset in ['adressa']:
             self.gcn_layer_num = 4
             self.intent_embedding_dim = 400
-            self.epoch = 5
+            self.epoch = 3
             self.dropout_rate = 0.25
             self.max_abstract_length = 128
             self.batch_size =32
