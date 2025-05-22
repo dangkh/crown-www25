@@ -367,6 +367,9 @@ class Corpus:
         for line in news_lines:
             news_ID, category, subCategory, title, abstract, publishTime, title_entities, abstract_entities = line.split('\t')
             index = self.news_ID_dict[news_ID]
+            with open("../translate_title_norwegian.json", 'r') as f:
+                dataTitle = json.load(f)
+            title = dataTitle[str(news_ID)]
             self.news_category[index] = self.category_dict[category] if category in self.category_dict else 0
             self.news_subCategory[index] = self.subCategory_dict[subCategory] if subCategory in self.subCategory_dict else 0
             words = pat.findall(title.lower()) if config.tokenizer == 'MIND' else word_tokenize(title.lower())
